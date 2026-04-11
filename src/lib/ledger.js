@@ -108,8 +108,8 @@ export function buildTransferLedgerEntries(transfers = []) {
       amount: transfer.customerAmount,
       note: `استحقاق حوالة ${transfer.reference}`,
       transferId: transfer.id,
-      createdAt: transfer.createdAt || isoNow(),
-      updatedAt: transfer.updatedAt || transfer.createdAt || isoNow(),
+      createdAt: transfer.pickedUpAt || transfer.updatedAt || transfer.createdAt || isoNow(),
+      updatedAt: transfer.updatedAt || transfer.pickedUpAt || transfer.createdAt || isoNow(),
     })
 
     if (!transfer.settled) return [dueEntry]
@@ -121,7 +121,7 @@ export function buildTransferLedgerEntries(transfers = []) {
       amount: -Math.abs(transfer.customerAmount),
       note: `تسوية حوالة ${transfer.reference}`,
       transferId: transfer.id,
-      createdAt: transfer.settledAt || transfer.updatedAt || transfer.createdAt || isoNow(),
+      createdAt: transfer.settledAt || transfer.createdAt || isoNow(),
       updatedAt: transfer.updatedAt || transfer.settledAt || transfer.createdAt || isoNow(),
     })
 
@@ -236,7 +236,7 @@ export function summarizeOfficeLedger(customers = [], transfers = [], persistedE
   const claimedProfit = claimHistory.reduce((sum, entry) => sum + Math.abs(entry.amount || 0), 0)
   const claimableProfit = Math.max(accountantRealizedMargin - claimedProfit, 0)
   const pendingProfit = Math.max(accountantGrossMargin - accountantRealizedMargin, 0)
-  const accountantCashOnHand = accountantSystemReceived - accountantCustomerPaid - claimedProfit
+  const accountantCashOnHand = accountantSystemReceived - accountantCustomerPaid - accountantOutstandingCustomer - claimedProfit
   const totalRunningBalance = [...customerSummary.values()].reduce(
     (sum, item) => sum + item.currentBalance,
     0,

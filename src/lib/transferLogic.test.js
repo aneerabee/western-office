@@ -432,9 +432,14 @@ describe('transferLogic', () => {
 
     expect(office.officeCustomerLiability).toBe(600)
     expect(office.accountantSystemReceived).toBe(330)
+    expect(office.accountantCustomerPaid).toBe(100)
     expect(office.accountantOutstandingCustomer).toBe(200)
+    expect(office.accountantCashOnHand).toBe(330 - 100 - 200 - 5)
     expect(office.accountantClaimedProfit).toBe(5)
     expect(office.accountantClaimableProfit).toBe(15)
+    expect(office.accountantGrossMargin).toBe(30)
+    expect(office.accountantRealizedMargin).toBe(20)
+    expect(office.accountantPendingProfit).toBe(10)
   })
 
   it('groups unsettled transfers by customer for separate settlements flow', () => {
