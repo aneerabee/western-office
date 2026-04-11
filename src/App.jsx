@@ -21,7 +21,7 @@ import {
   updateTransferField,
 } from './lib/transferLogic'
 
-const STORAGE_KEY = 'western-office-state'
+const STORAGE_KEY = 'western-office-state-v2'
 
 const currency = new Intl.NumberFormat('en-US', {
   style: 'currency',

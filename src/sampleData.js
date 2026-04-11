@@ -10,83 +10,9 @@ export const statusMeta = {
   closed: { label: 'مغلقة', color: '#1f2937' },
 }
 
-export const seedCustomers = [
-  {
-    id: 101,
-    name: 'محمد الورفلي',
-    openingBalance: 1200,
-    settledTotal: 700,
-    createdAt: '2026-04-11T08:00:00.000Z',
-    updatedAt: '2026-04-11T08:00:00.000Z',
-  },
-  {
-    id: 102,
-    name: 'ليلى الفيتوري',
-    openingBalance: 0,
-    settledTotal: 0,
-    createdAt: '2026-04-11T08:05:00.000Z',
-    updatedAt: '2026-04-11T08:05:00.000Z',
-  },
-  {
-    id: 103,
-    name: 'خالد الجالي',
-    openingBalance: 300,
-    settledTotal: 100,
-    createdAt: '2026-04-11T08:10:00.000Z',
-    updatedAt: '2026-04-11T08:10:00.000Z',
-  },
-]
+export const seedCustomers = []
 
-export const seedTransfers = [
-  {
-    id: 1,
-    customerId: 101,
-    reference: 'WU-843210',
-    senderName: 'مجدي الشريف',
-    receiverName: 'محمد الورفلي',
-    status: 'customer_confirmed',
-    issueCode: '',
-    systemAmount: 1900,
-    customerAmount: 1885,
-    margin: 15,
-    paymentStatus: 'pending',
-    note: '',
-    createdAt: '2026-04-11T09:10:00.000Z',
-    updatedAt: '2026-04-11T09:10:00.000Z',
-  },
-  {
-    id: 2,
-    customerId: 102,
-    reference: 'WU-843211',
-    senderName: 'سارة المبروك',
-    receiverName: 'ليلى الفيتوري',
-    status: 'issue',
-    issueCode: 'name_mismatch',
-    systemAmount: null,
-    customerAmount: null,
-    margin: null,
-    paymentStatus: 'pending',
-    note: 'مشكلة اسم',
-    createdAt: '2026-04-11T10:20:00.000Z',
-    updatedAt: '2026-04-11T10:20:00.000Z',
-  },
-  {
-    id: 3,
-    customerId: 103,
-    reference: 'WU-843212',
-    senderName: 'محمود القماطي',
-    receiverName: 'خالد الجالي',
-    status: 'paid',
-    issueCode: '',
-    systemAmount: 2350,
-    customerAmount: 2328,
-    margin: 22,
-    paymentStatus: 'paid',
-    note: '',
-    createdAt: '2026-04-11T11:15:00.000Z',
-    updatedAt: '2026-04-11T11:15:00.000Z',
-  },
-]
+export const seedTransfers = []
 
 export const issueCatalog = [
   { code: 'name_mismatch', label: 'اسم غير مطابق' },
