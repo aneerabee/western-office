@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { computeDailyClosing, getAvailableDates, getDateKey } from './dailyClosing'
+import { collectTransferActivity, computeDailyClosing, createDailyClosingRecord, getAvailableDates, getDateKey } from './dailyClosing'
 import { buildSeedLedgerEntries, createProfitClaimEntry, summarizeOfficeLedger } from './ledger'
 import { summarizeCustomers } from './transferLogic'
 
@@ -49,6 +49,23 @@ describe('dailyClosing', () => {
     expect(dates).toHaveLength(2)
   })
 
+  it('does not create fake closing dates from updatedAt only', () => {
+    const noisyTransfer = {
+      ...transfers[0],
+      id: 99,
+      createdAt: '2026-04-10T09:00:00.000Z',
+      sentAt: null,
+      pickedUpAt: null,
+      issueAt: null,
+      reviewHoldAt: null,
+      resetAt: null,
+      settledAt: null,
+      updatedAt: '2026-04-15T10:00:00.000Z',
+    }
+    const dates = getAvailableDates([noisyTransfer], [])
+    expect(dates).toEqual(['2026-04-10'])
+  })
+
   it('computes daily closing for a specific date', () => {
     const closing = computeDailyClosing(transfers, customerSummary, officeSummary, claimHistory, '2026-04-11')
     expect(closing.customerSnapshot.totalOutstanding).toBe(580)
@@ -58,6 +75,7 @@ describe('dailyClosing', () => {
     expect(closing.officeDaily.officeSystemReceivedToday).toBe(200)
     expect(closing.officeDaily.officeCustomerPaidToday).toBe(90)
     expect(closing.officeDaily.claimsValueToday).toBe(10)
+    expect(closing.officeDaily.activityToday.some((row) => row.transfer.id === 2)).toBe(true)
   })
 
   it('includes cumulative customer and accountant views', () => {
@@ -66,6 +84,59 @@ describe('dailyClosing', () => {
     const mohamed = closing.customerSnapshot.customerBreakdown.find((c) => c.name === 'محمد')
     expect(mohamed.pickedUpCount).toBe(1)
     expect(closing.accountantSnapshot.claimedProfit).toBe(10)
+  })
+
+  it('يوحّد سجل النشاط والعدادات عند issue ثم reset في نفس اليوم', () => {
+    const txs = [
+      {
+        ...transfers[0],
+        id: 44,
+        reference: 'WU-440',
+        status: 'received',
+        issueAt: null,
+        resetAt: '2026-04-11T18:30:00.000Z',
+        history: [
+          { field: 'status', from: 'with_employee', to: 'issue', at: '2026-04-11T18:00:00.000Z' },
+          { field: 'status', from: 'issue', to: 'received', at: '2026-04-11T18:30:00.000Z' },
+        ],
+      },
+    ]
+    const summary = summarizeCustomers(customers, txs, buildSeedLedgerEntries(customers))
+    const office = summarizeOfficeLedger(customers, txs, buildSeedLedgerEntries(customers))
+    const closing = computeDailyClosing(txs, summary, office, [], '2026-04-11')
+    const activity = collectTransferActivity(txs[0], '2026-04-11')
+
+    expect(activity.map((item) => item.type)).toEqual(expect.arrayContaining(['issue', 'reset']))
+    expect(closing.officeDaily.issueCount).toBe(1)
+    expect(closing.officeDaily.resetCount).toBe(1)
+    expect(closing.officeDaily.activityToday[0].activities.map((item) => item.type)).toEqual(
+      expect.arrayContaining(['issue', 'reset']),
+    )
+    expect(closing.officeDaily.issueToday).toHaveLength(1)
+  })
+
+  it('يظهر يوم النشاط إذا كان موجودًا في history فقط', () => {
+    const txs = [
+      {
+        ...transfers[0],
+        id: 45,
+        createdAt: '2026-04-10T08:00:00.000Z',
+        issueAt: null,
+        resetAt: '2026-04-11T11:00:00.000Z',
+        history: [{ field: 'status', from: 'with_employee', to: 'issue', at: '2026-04-11T10:00:00.000Z' }],
+      },
+    ]
+
+    expect(getAvailableDates(txs, [])).toContain('2026-04-11')
+  })
+
+  it('ينشئ سجل إقفال محفوظ قابل للمراجعة', () => {
+    const closing = computeDailyClosing(transfers, customerSummary, officeSummary, claimHistory, '2026-04-11')
+    const record = createDailyClosingRecord(closing)
+
+    expect(record.date).toBe('2026-04-11')
+    expect(record.snapshot.officeDaily.settledCount).toBe(1)
+    expect(record.id).toBe('daily-closing-2026-04-11')
   })
 
   it('returns zeros for empty date', () => {

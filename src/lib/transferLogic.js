@@ -41,6 +41,10 @@ export function computeMargin(systemAmount, customerAmount) {
   return systemAmount - customerAmount
 }
 
+export function getTransferWorkflowTimestamp(item) {
+  return item.resetAt || item.createdAt || item.updatedAt || ''
+}
+
 /* ── Build ── */
 
 export function buildCustomerFromDraft(draft, existingCustomers = []) {
@@ -264,9 +268,15 @@ export function getUnsettledForCustomer(transfers, customerId) {
 
 /* ── Filtering & Sorting ── */
 
-function getTodayDate() {
-  const d = new Date()
+function toLocalDateKey(value) {
+  if (!value) return ''
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return ''
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function getTodayDate() {
+  return toLocalDateKey(new Date())
 }
 
 export function filterTransfers(transfers, filters, customersById = new Map()) {
@@ -289,7 +299,7 @@ export function filterTransfers(transfers, filters, customersById = new Map()) {
       filters.customerFilter === FILTER_ALL || t.customerId === Number(filters.customerFilter)
 
     let matchView = true
-    const createdDate = t.createdAt ? t.createdAt.slice(0, 10) : ''
+    const createdDate = toLocalDateKey(getTransferWorkflowTimestamp(t))
     if (filters.viewMode === 'active') {
       // Show: issues + received + with_employee + any picked_up still awaiting settlement
       if (t.status === 'issue') matchView = true
@@ -319,6 +329,7 @@ const STATUS_PRIORITY = { issue: 0, review_hold: 1, received: 2, with_employee: 
 
 export function sortTransfers(transfers, sortMode, customersById = new Map()) {
   const sorted = [...transfers]
+  const getWorkflowTime = (item) => new Date(getTransferWorkflowTimestamp(item)).getTime()
 
   switch (sortMode) {
     case 'smart':
@@ -326,11 +337,11 @@ export function sortTransfers(transfers, sortMode, customersById = new Map()) {
         const pa = STATUS_PRIORITY[a.status] ?? 9
         const pb = STATUS_PRIORITY[b.status] ?? 9
         if (pa !== pb) return pa - pb
-        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        return getWorkflowTime(b) - getWorkflowTime(a)
       })
       return sorted
     case 'oldest':
-      sorted.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+      sorted.sort((a, b) => getWorkflowTime(a) - getWorkflowTime(b))
       return sorted
     case 'customer':
       sorted.sort((a, b) =>
@@ -344,7 +355,7 @@ export function sortTransfers(transfers, sortMode, customersById = new Map()) {
       return sorted
     case 'latest':
     default:
-      sorted.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      sorted.sort((a, b) => getWorkflowTime(b) - getWorkflowTime(a))
       return sorted
   }
 }
@@ -376,6 +387,7 @@ export function summarizeTransfers(transfers) {
     total: transfers.length,
     receivedCount: transfers.filter((t) => t.status === 'received').length,
     withEmployeeCount: transfers.filter((t) => t.status === 'with_employee').length,
+    reviewHoldCount: transfers.filter((t) => t.status === 'review_hold').length,
     pickedUpCount: pickedUp.length,
     issueCount: transfers.filter((t) => t.status === 'issue').length,
     settledCount: pickedUp.filter((t) => t.settled).length,
@@ -487,12 +499,14 @@ export function migrateState(state) {
     ? state.ledgerEntries
     : buildSeedLedgerEntries(customers)
   const claimHistory = Array.isArray(state.claimHistory) ? state.claimHistory : []
+  const dailyClosings = Array.isArray(state.dailyClosings) ? state.dailyClosings : []
 
   return {
     customers,
     transfers,
     ledgerEntries,
     claimHistory,
+    dailyClosings,
   }
 }
 
@@ -514,6 +528,7 @@ export function parseAppStateBackup(text) {
     })),
     ledgerEntries: Array.isArray(parsed.ledgerEntries) ? parsed.ledgerEntries : undefined,
     claimHistory: Array.isArray(parsed.claimHistory) ? parsed.claimHistory : [],
+    dailyClosings: Array.isArray(parsed.dailyClosings) ? parsed.dailyClosings : [],
     transfers: parsed.transfers.map((t) => ({
       issueCode: '',
       note: '',

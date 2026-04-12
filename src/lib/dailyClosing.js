@@ -1,5 +1,8 @@
 export function getDateKey(isoString) {
-  return isoString ? isoString.slice(0, 10) : ''
+  if (!isoString) return ''
+  const d = new Date(isoString)
+  if (Number.isNaN(d.getTime())) return ''
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 export function getTodayKey() {
@@ -7,12 +10,20 @@ export function getTodayKey() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
+const STATUS_ACTIVITY_META = {
+  with_employee: { type: 'sent', label: 'أُرسلت للموظف' },
+  picked_up: { type: 'picked_up', label: 'تم السحب' },
+  review_hold: { type: 'review_hold', label: 'مراجعة لاحقة' },
+  issue: { type: 'issue', label: 'مشكلة' },
+  received: { type: 'reset', label: 'أعيدت جديدة' },
+}
+
 function pushDate(set, value) {
   const key = getDateKey(value)
   if (key) set.add(key)
 }
 
-export function getAvailableDates(transfers, claimHistory = []) {
+export function getAvailableDates(transfers, claimHistory = [], dailyClosings = []) {
   const dates = new Set()
 
   for (const transfer of transfers) {
@@ -23,11 +34,22 @@ export function getAvailableDates(transfers, claimHistory = []) {
     pushDate(dates, transfer.reviewHoldAt)
     pushDate(dates, transfer.resetAt)
     pushDate(dates, transfer.settledAt)
-    pushDate(dates, transfer.updatedAt)
+
+    if (Array.isArray(transfer.history)) {
+      for (const entry of transfer.history) {
+        if (entry?.field === 'status') {
+          pushDate(dates, entry.at)
+        }
+      }
+    }
   }
 
   for (const claim of claimHistory) {
     pushDate(dates, claim.createdAt)
+  }
+
+  for (const closing of dailyClosings) {
+    if (closing?.date) dates.add(closing.date)
   }
 
   return [...dates].sort().reverse()
@@ -37,37 +59,116 @@ function isOnDate(value, date) {
   return getDateKey(value) === date
 }
 
+function addActivity(activityMap, type, label, at) {
+  if (!type || !label || !at) return
+  const key = `${type}:${at}`
+  if (!activityMap.has(key)) {
+    activityMap.set(key, { type, label, at })
+  }
+}
+
+export function collectTransferActivity(transfer, date) {
+  const activityMap = new Map()
+
+  if (isOnDate(transfer.createdAt, date)) addActivity(activityMap, 'created', 'دخلت', transfer.createdAt)
+  if (isOnDate(transfer.sentAt, date)) addActivity(activityMap, 'sent', 'أُرسلت للموظف', transfer.sentAt)
+  if (isOnDate(transfer.pickedUpAt, date)) addActivity(activityMap, 'picked_up', 'تم السحب', transfer.pickedUpAt)
+  if (isOnDate(transfer.reviewHoldAt, date)) addActivity(activityMap, 'review_hold', 'مراجعة لاحقة', transfer.reviewHoldAt)
+  if (isOnDate(transfer.issueAt, date)) addActivity(activityMap, 'issue', 'مشكلة', transfer.issueAt)
+  if (isOnDate(transfer.resetAt, date)) addActivity(activityMap, 'reset', 'أعيدت جديدة', transfer.resetAt)
+  if (isOnDate(transfer.settledAt, date)) addActivity(activityMap, 'settled', 'تسوية', transfer.settledAt)
+
+  if (Array.isArray(transfer.history)) {
+    for (const entry of transfer.history) {
+      if (entry?.field !== 'status' || !isOnDate(entry.at, date)) continue
+      const meta = STATUS_ACTIVITY_META[entry.to]
+      if (!meta) continue
+      addActivity(activityMap, meta.type, meta.label, entry.at)
+    }
+  }
+
+  return [...activityMap.values()].sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime())
+}
+
+function buildActivityRows(transfers, date) {
+  return transfers
+    .map((transfer) => {
+      const activities = collectTransferActivity(transfer, date)
+      if (activities.length === 0) return null
+      const latestActivity = activities[activities.length - 1]
+      const activityAtByType = Object.fromEntries(activities.map((item) => [item.type, item.at]))
+
+      return {
+        transfer,
+        activities,
+        latestActivity,
+        activityAtByType,
+      }
+    })
+    .filter(Boolean)
+    .sort((a, b) => new Date(b.latestActivity.at).getTime() - new Date(a.latestActivity.at).getTime())
+}
+
+function rowsByActivityType(activityRows, type) {
+  return activityRows
+    .filter((row) => row.activities.some((item) => item.type === type))
+    .sort((a, b) => new Date(b.activityAtByType[type]).getTime() - new Date(a.activityAtByType[type]).getTime())
+}
+
+// Get the field value as it was at the time of a specific activity.
+// If the transfer was reset AFTER the activity, the current value is null —
+// we must recover the value from history[].
+function getFieldAtActivity(transfer, field, activityAt) {
+  const current = transfer?.[field]
+  if (current !== null && current !== undefined) return current
+
+  // Walk history backward looking for the last value set before or at activityAt
+  if (!Array.isArray(transfer?.history)) return null
+  const activityTime = new Date(activityAt).getTime()
+  let lastValue = null
+  for (const entry of transfer.history) {
+    if (entry?.field !== field) continue
+    const entryTime = new Date(entry.at).getTime()
+    if (entryTime > activityTime) break
+    if (entry.to !== null && entry.to !== undefined) lastValue = entry.to
+  }
+  return lastValue
+}
+
+function sumTransferAmount(rows, field, activityType) {
+  return rows.reduce((sum, row) => {
+    const activityAt = row.activityAtByType?.[activityType] || row.latestActivity?.at
+    const value = getFieldAtActivity(row.transfer, field, activityAt)
+    return sum + (typeof value === 'number' ? value : 0)
+  }, 0)
+}
+
+export function createDailyClosingRecord(closing) {
+  const now = new Date().toISOString()
+  return {
+    id: `daily-closing-${closing.date}`,
+    date: closing.date,
+    savedAt: now,
+    updatedAt: now,
+    snapshot: JSON.parse(JSON.stringify(closing)),
+  }
+}
+
 export function computeDailyClosing(transfers, customerSummary, officeSummary, claimHistory, date) {
-  const createdToday = transfers.filter((transfer) => isOnDate(transfer.createdAt, date))
-  const sentToday = transfers.filter((transfer) => isOnDate(transfer.sentAt, date))
-  const pickedUpToday = transfers.filter((transfer) => isOnDate(transfer.pickedUpAt, date))
-  const issueToday = transfers.filter((transfer) => isOnDate(transfer.issueAt, date))
-  const reviewHoldToday = transfers.filter((transfer) => isOnDate(transfer.reviewHoldAt, date))
-  const resetToday = transfers.filter((transfer) => isOnDate(transfer.resetAt, date))
-  const settledToday = transfers.filter((transfer) => isOnDate(transfer.settledAt, date))
+  const activityToday = buildActivityRows(transfers, date)
+  const createdToday = rowsByActivityType(activityToday, 'created')
+  const sentToday = rowsByActivityType(activityToday, 'sent')
+  const pickedUpToday = rowsByActivityType(activityToday, 'picked_up')
+  const issueToday = rowsByActivityType(activityToday, 'issue')
+  const reviewHoldToday = rowsByActivityType(activityToday, 'review_hold')
+  const resetToday = rowsByActivityType(activityToday, 'reset')
+  const settledToday = rowsByActivityType(activityToday, 'settled')
   const claimsToday = claimHistory.filter((claim) => isOnDate(claim.createdAt, date))
 
-  const officeSystemReceivedToday = pickedUpToday.reduce(
-    (sum, transfer) => sum + (typeof transfer.systemAmount === 'number' ? transfer.systemAmount : 0),
-    0,
-  )
-  const officeCustomerPaidToday = settledToday.reduce(
-    (sum, transfer) => sum + (typeof transfer.customerAmount === 'number' ? transfer.customerAmount : 0),
-    0,
-  )
-  const officeProfitRealizedToday = settledToday.reduce(
-    (sum, transfer) => sum + (typeof transfer.margin === 'number' ? transfer.margin : 0),
-    0,
-  )
+  const officeSystemReceivedToday = sumTransferAmount(pickedUpToday, 'systemAmount', 'picked_up')
+  const officeCustomerPaidToday = sumTransferAmount(settledToday, 'customerAmount', 'settled')
+  const officeProfitRealizedToday = sumTransferAmount(settledToday, 'margin', 'settled')
   const claimsValueToday = claimsToday.reduce((sum, claim) => sum + Math.abs(claim.amount || 0), 0)
-
-  // Include transfers that went through issue status today but were later reset
-  const issueFromHistory = transfers.filter((t) =>
-    Array.isArray(t.history) &&
-    t.history.some((h) => h.field === 'status' && h.to === 'issue' && isOnDate(h.at, date)) &&
-    !isOnDate(t.issueAt, date),
-  )
-  const allIssueToday = [...issueToday, ...issueFromHistory]
 
   return {
     date,
@@ -85,7 +186,7 @@ export function computeDailyClosing(transfers, customerSummary, officeSummary, c
       createdCount: createdToday.length,
       sentCount: sentToday.length,
       pickedUpCount: pickedUpToday.length,
-      issueCount: allIssueToday.length,
+      issueCount: issueToday.length,
       reviewHoldCount: reviewHoldToday.length,
       resetCount: resetToday.length,
       settledCount: settledToday.length,
@@ -93,10 +194,13 @@ export function computeDailyClosing(transfers, customerSummary, officeSummary, c
       officeCustomerPaidToday,
       officeProfitRealizedToday,
       claimsValueToday,
-      createdToday: createdToday.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
-      sentToday: sentToday.sort((a, b) => new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime()),
+      activityToday,
+      createdToday,
+      sentToday,
       pickedUpToday,
-      issueToday: allIssueToday,
+      issueToday,
+      reviewHoldToday,
+      resetToday,
       settledToday,
     },
     accountantSnapshot: {

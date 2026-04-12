@@ -5,6 +5,7 @@ import {
   computeMargin,
   parseMoney,
   filterTransfers,
+  getTransferWorkflowTimestamp,
   getUnsettledForCustomer,
   migrateState,
   parseAppStateBackup,
@@ -310,6 +311,29 @@ describe('الفلترة والترتيب', () => {
     expect(r.some((t) => t.id === 31)).toBe(true)   // issue — ظاهرة
   })
 
+  it('العرض اليومي يعتمد على تاريخ التشغيل بعد إعادة الحوالة جديدة', () => {
+    const resetToday = new Date().toISOString()
+    const r = filterTransfers(
+      [
+        makeTx({
+          id: 33,
+          customerId: 201,
+          reference: 'WU-DDD',
+          senderName: 'م',
+          receiverName: 'عمر',
+          status: 'received',
+          createdAt: '2026-04-01T08:00:00.000Z',
+          updatedAt: resetToday,
+          resetAt: resetToday,
+        }),
+      ],
+      { searchTerm: '', statusFilter: 'all', viewMode: 'today', customerFilter: 'all' },
+      customersById,
+    )
+    expect(r).toHaveLength(1)
+    expect(getTransferWorkflowTimestamp(r[0])).toBe(resetToday)
+  })
+
   it('العرض المكتمل يُظهر المسوّاة فقط', () => {
     const r = filterTransfers(txs, { searchTerm: '', statusFilter: 'all', viewMode: 'completed', customerFilter: 'all' }, customersById)
     expect(r).toHaveLength(1)
@@ -320,6 +344,14 @@ describe('الفلترة والترتيب', () => {
     const sorted = sortTransfers(txs, 'smart', customersById)
     expect(sorted[0].status).toBe('issue')
     expect(sorted[1].status).toBe('received')
+  })
+
+  it('الترتيب الأحدث يستخدم تاريخ التشغيل بعد reset', () => {
+    const sorted = sortTransfers([
+      makeTx({ id: 34, customerId: 201, reference: 'OLD', senderName: 'أ', receiverName: 'عمر', status: 'received', createdAt: '2026-04-01T08:00:00.000Z', updatedAt: '2026-04-12T11:00:00.000Z', resetAt: '2026-04-12T11:00:00.000Z' }),
+      makeTx({ id: 35, customerId: 201, reference: 'NEW', senderName: 'ب', receiverName: 'عمر', status: 'received', createdAt: '2026-04-11T08:00:00.000Z', updatedAt: '2026-04-11T08:00:00.000Z' }),
+    ], 'latest', customersById)
+    expect(sorted[0].id).toBe(34)
   })
 
   it('الفلتر بالزبون يعرض حوالاته فقط', () => {
@@ -414,6 +446,7 @@ describe('الملخصات والربط بين الأقسام', () => {
     expect(s.total).toBe(6)
     expect(s.receivedCount).toBe(1)
     expect(s.withEmployeeCount).toBe(1)
+    expect(s.reviewHoldCount).toBe(0)
     expect(s.issueCount).toBe(1)
     expect(s.pickedUpCount).toBe(3)      // 403, 404, 406
     expect(s.settledCount).toBe(1)        // 404
@@ -549,12 +582,17 @@ describe('الهجرة والنسخ الاحتياطي', () => {
   })
 
   it('استرجاع النسخة الاحتياطية يحافظ على البيانات', () => {
-    const backup = JSON.stringify({ customers, transfers: [] })
+    const backup = JSON.stringify({
+      customers,
+      transfers: [],
+      dailyClosings: [{ id: 'daily-closing-2026-04-12', date: '2026-04-12', savedAt: '2026-04-12T20:00:00.000Z', snapshot: { date: '2026-04-12' } }],
+    })
     const restored = parseAppStateBackup(backup)
     expect(restored.customers).toHaveLength(2)
     expect(restored.transfers).toHaveLength(0)
     expect(restored.ledgerEntries.length).toBeGreaterThan(0) // seeds generated
     expect(Array.isArray(restored.claimHistory)).toBe(true)
+    expect(restored.dailyClosings).toHaveLength(1)
   })
 
   it('فلتر التاريخ يعمل بشكل صحيح', () => {
@@ -604,8 +642,10 @@ describe('الهجرة والنسخ الاحتياطي', () => {
     const migrated = migrateState({
       customers,
       transfers: [{ id: 1, customerId: 201, reference: 'M-1', senderName: 'أ', receiverName: 'عمر', status: 'new', paymentStatus: 'pending', systemAmount: 100, customerAmount: 90, margin: 10, createdAt: '2026-04-12T08:00:00.000Z', updatedAt: '2026-04-12T08:00:00.000Z' }],
+      dailyClosings: [{ id: 'daily-closing-2026-04-10', date: '2026-04-10', snapshot: {} }],
     })
     expect(Array.isArray(migrated.transfers[0].history)).toBe(true)
+    expect(migrated.dailyClosings).toHaveLength(1)
   })
 
   it('يرفض نسخة احتياطية تالفة', () => {

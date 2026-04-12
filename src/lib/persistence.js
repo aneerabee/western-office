@@ -8,6 +8,7 @@ const SUPABASE_TABLES = {
   transfers: 'wo_transfers',
   ledgerEntries: 'wo_ledger_entries',
   claimHistory: 'wo_claim_history',
+  dailyClosings: 'wo_daily_closings',
 }
 
 let cachedClient = null
@@ -44,26 +45,43 @@ function writeLocalState(state) {
   window.localStorage.setItem(LOCAL_STORAGE_KEYS[0], JSON.stringify(state))
 }
 
+// Critical tables — if these fail, we abort load to prevent data loss
+const CRITICAL_TABLES = ['customers', 'transfers', 'ledgerEntries', 'claimHistory']
+// Optional tables — if missing (e.g. migration not applied), we use []
+const OPTIONAL_TABLES = ['dailyClosings']
+
+async function loadTable(client, key) {
+  try {
+    const { data, error } = await client.from(SUPABASE_TABLES[key]).select('id,payload')
+    if (error) return { key, data: null, error }
+    return { key, data: data || [], error: null }
+  } catch (err) {
+    return { key, data: null, error: err }
+  }
+}
+
 async function loadFromSupabase() {
   const client = getSupabaseClient()
   if (!client) return null
 
-  const [{ data: customers, error: customerError }, { data: transfers, error: transferError }, { data: ledgerEntries, error: ledgerError }, { data: claimHistory, error: claimHistoryError }] = await Promise.all([
-    client.from(SUPABASE_TABLES.customers).select('id,payload'),
-    client.from(SUPABASE_TABLES.transfers).select('id,payload'),
-    client.from(SUPABASE_TABLES.ledgerEntries).select('id,payload'),
-    client.from(SUPABASE_TABLES.claimHistory).select('id,payload'),
-  ])
+  const allKeys = [...CRITICAL_TABLES, ...OPTIONAL_TABLES]
+  const results = await Promise.all(allKeys.map((key) => loadTable(client, key)))
 
-  if (customerError || transferError || ledgerError || claimHistoryError) {
-    throw customerError || transferError || ledgerError || claimHistoryError
+  // Fail fast if any critical table failed
+  const criticalFailure = results.find((r) => CRITICAL_TABLES.includes(r.key) && r.error)
+  if (criticalFailure) throw criticalFailure.error
+
+  const map = {}
+  for (const r of results) {
+    map[r.key] = (r.data || []).map((row) => row.payload)
   }
 
   return {
-    customers: (customers || []).map((row) => row.payload),
-    transfers: (transfers || []).map((row) => row.payload),
-    ledgerEntries: (ledgerEntries || []).map((row) => row.payload),
-    claimHistory: (claimHistory || []).map((row) => row.payload),
+    customers: map.customers,
+    transfers: map.transfers,
+    ledgerEntries: map.ledgerEntries,
+    claimHistory: map.claimHistory,
+    dailyClosings: map.dailyClosings || [],
   }
 }
 
@@ -95,10 +113,18 @@ async function saveToSupabase(state) {
   const client = getSupabaseClient()
   if (!client) return
 
+  // Critical tables — must succeed
   await syncTable(client, SUPABASE_TABLES.customers, state.customers)
   await syncTable(client, SUPABASE_TABLES.transfers, state.transfers)
   await syncTable(client, SUPABASE_TABLES.ledgerEntries, state.ledgerEntries || [])
   await syncTable(client, SUPABASE_TABLES.claimHistory, state.claimHistory || [])
+
+  // Optional: don't block save if table is missing
+  try {
+    await syncTable(client, SUPABASE_TABLES.dailyClosings, state.dailyClosings || [])
+  } catch (err) {
+    console.warn('[persistence] dailyClosings sync failed (non-critical):', err?.message || err)
+  }
 }
 
 export async function loadPersistedState(fallbackState, migrateState) {

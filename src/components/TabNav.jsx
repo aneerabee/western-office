@@ -1,29 +1,26 @@
 const tabs = [
-  { key: 'transfers', icon: '↗', label: 'حوالات' },
-  { key: 'customers', icon: '👤', label: 'زبائن' },
-  { key: 'settlements', icon: '✓', label: 'تسويات' },
-  { key: 'closing', icon: '📊', label: 'إقفال' },
-  { key: 'issues', icon: '!', label: 'مشاكل' },
+  { key: 'transfers', label: 'حوالات' },
+  { key: 'customers', label: 'زبائن' },
+  { key: 'settlements', label: 'تسويات' },
+  { key: 'closing', label: 'إقفال' },
+  { key: 'issues', label: 'مشاكل' },
 ]
 
 export default function TabNav({ active, onChange, issueCount }) {
   return (
-    <nav className="bottom-nav">
+    <div className="segmented">
       {tabs.map((tab) => (
         <button
           key={tab.key}
-          className={`nav-item${active === tab.key ? ' nav-item--active' : ''}`}
+          className={`segmented-btn${active === tab.key ? ' segmented-btn--active' : ''}`}
           onClick={() => onChange(tab.key)}
         >
-          <span className="nav-icon">
-            {tab.icon}
-            {tab.key === 'issues' && issueCount > 0 ? (
-              <span className="nav-badge">{issueCount}</span>
-            ) : null}
-          </span>
-          <span className="nav-label">{tab.label}</span>
+          <span>{tab.label}</span>
+          {tab.key === 'issues' && issueCount > 0 ? (
+            <span className="segmented-badge">{issueCount}</span>
+          ) : null}
         </button>
       ))}
-    </nav>
+    </div>
   )
 }

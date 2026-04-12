@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
 import { seedCustomers, seedTransfers, statusMeta } from './sampleData'
+import { computeDailyClosing, createDailyClosingRecord } from './lib/dailyClosing'
 import {
   FILTER_ALL,
   buildCustomerFromDraft,
@@ -64,6 +65,7 @@ const FALLBACK_STATE = migrateState({
   transfers: seedTransfers,
   ledgerEntries: [],
   claimHistory: [],
+  dailyClosings: [],
 })
 
 const VALID_TABS = new Set(['transfers', 'customers', 'settlements', 'closing', 'issues'])
@@ -91,7 +93,7 @@ function App() {
   const [loadFailed, setLoadFailed] = useState(false)
   const [state, setState] = useState(FALLBACK_STATE)
 
-  const { customers, transfers, ledgerEntries, claimHistory } = state
+  const { customers, transfers, ledgerEntries, claimHistory, dailyClosings } = state
 
   useEffect(() => {
     let cancelled = false
@@ -196,19 +198,60 @@ function App() {
   }
 
   function handleClaimProfit() {
-    if (officeSummary.accountantClaimableProfit <= 0) {
+    // Read current claimable amount from the latest state (not stale closure)
+    const nonClaimLedger = state.ledgerEntries.filter((entry) => entry.type !== 'profit_claim')
+    const currentSummary = summarizeOfficeLedger(
+      state.customers,
+      state.transfers,
+      [...nonClaimLedger, ...state.claimHistory],
+    )
+    const claimedAmount = currentSummary.accountantClaimableProfit
+
+    if (claimedAmount <= 0) {
       setFeedback('لا يوجد ربح متاح للمطالبة الآن.')
       return
     }
-    const amount = officeSummary.accountantClaimableProfit
-    if (!window.confirm(`تأكيد مطالبة ربح بقيمة ${amount.toFixed(2)}؟`)) return
 
-    const entry = createProfitClaimEntry(amount)
+    // Confirm BEFORE touching state — pure updater below
+    if (!window.confirm(`تأكيد مطالبة ربح بقيمة ${claimedAmount.toFixed(2)}؟`)) return
+
+    const entry = createProfitClaimEntry(claimedAmount)
     setState((s) => ({
       ...s,
       claimHistory: [entry, ...s.claimHistory],
     }))
-    setFeedback(`تم تسجيل مطالبة ربح بقيمة ${amount.toFixed(2)}.`)
+    setFeedback(`تم تسجيل مطالبة ربح بقيمة ${claimedAmount.toFixed(2)}.`)
+  }
+
+  function handleSaveDailyClosing(date) {
+    setState((s) => {
+      const customerSummarySnapshot = summarizeCustomers(s.customers, s.transfers, s.ledgerEntries)
+      const nonClaimLedger = s.ledgerEntries.filter((entry) => entry.type !== 'profit_claim')
+      const officeSummarySnapshot = summarizeOfficeLedger(
+        s.customers,
+        s.transfers,
+        [...nonClaimLedger, ...s.claimHistory],
+      )
+      const closing = computeDailyClosing(
+        s.transfers,
+        customerSummarySnapshot,
+        officeSummarySnapshot,
+        s.claimHistory,
+        date,
+      )
+      const record = createDailyClosingRecord(closing)
+      const nextDailyClosings = [
+        ...s.dailyClosings.filter((item) => item.date !== date),
+        record,
+      ].sort((a, b) => new Date(b.savedAt).getTime() - new Date(a.savedAt).getTime())
+
+      return {
+        ...s,
+        dailyClosings: nextDailyClosings,
+      }
+    })
+
+    setFeedback(`تم حفظ سجل الإقفال ليوم ${date}.`)
   }
 
   function handleAddCustomer(e) {
@@ -274,6 +317,9 @@ function App() {
     try {
       const text = await file.text()
       setState(parseAppStateBackup(text))
+      // Restore enables hydration and clears any prior load failure
+      setLoadFailed(false)
+      setIsHydrated(true)
       setFeedback('تم استرجاع النسخة الاحتياطية.')
     } catch (err) {
       setFeedback(err instanceof Error ? err.message : 'تعذر قراءة النسخة الاحتياطية.')
@@ -287,14 +333,15 @@ function App() {
       <header className="topbar">
         <div className="topbar-title">
           <h1>Western Office</h1>
-        </div>
-        <div className="topbar-actions">
           <span className="storage-badge">
-            {storageMode === 'supabase' ? 'تخزين سحابي' : 'تخزين محلي'}
+            {storageMode === 'supabase' ? 'سحابي' : 'محلي'}
           </span>
-          <button className="ghost-button" onClick={exportCsv}>CSV</button>
-          <button className="ghost-button" onClick={exportBackup}>نسخة احتياطية</button>
-          <button className="ghost-button" onClick={() => importRef.current?.click()}>استرجاع</button>
+        </div>
+        <TabNav active={activeTab} onChange={changeTab} issueCount={issueCount} />
+        <div className="topbar-actions">
+          <button className="ghost-button" onClick={exportCsv} title="CSV">CSV</button>
+          <button className="ghost-button" onClick={exportBackup} title="نسخة احتياطية">نسخة</button>
+          <button className="ghost-button" onClick={() => importRef.current?.click()} title="استرجاع">استرجاع</button>
           <input
             ref={importRef}
             className="hidden-input"
@@ -322,6 +369,10 @@ function App() {
           <span>عند الموظف</span>
           <strong className="text-blue">{transferSummary.withEmployeeCount}</strong>
         </article>
+        <article className="stat-card">
+          <span>مراجعة لاحقة</span>
+          <strong className="text-orange">{transferSummary.reviewHoldCount}</strong>
+        </article>
         <article className="stat-card stat-card--warning">
           <span>مشاكل</span>
           <strong>{issueCount}</strong>
@@ -343,8 +394,6 @@ function App() {
           <strong className="text-green">{new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(officeSummary.accountantClaimableProfit)}</strong>
         </article>
       </section>
-
-      <TabNav active={activeTab} onChange={changeTab} issueCount={issueCount} />
 
       {activeTab === 'transfers' ? (
         <TransfersTab
@@ -405,8 +454,10 @@ function App() {
           customerSummary={customerSummary}
           officeSummary={officeSummary}
           claimHistory={claimHistory}
+          dailyClosings={dailyClosings}
           customersById={customersById}
           onClaimProfit={handleClaimProfit}
+          onSaveClosing={handleSaveDailyClosing}
         />
       ) : null}
 
