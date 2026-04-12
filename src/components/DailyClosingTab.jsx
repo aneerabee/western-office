@@ -174,6 +174,39 @@ export default function DailyClosingTab({
           </div>
         ) : null}
 
+        {/* ── أُرسلت للموظف اليوم ── */}
+        {daily.sentToday.length > 0 ? (
+          <div className="closing-section">
+            <h3>أُرسلت للموظف اليوم ({daily.sentToday.length})</h3>
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>الرقم</th>
+                    <th>الزبون</th>
+                    <th>المرسل</th>
+                    <th>وقت الإرسال</th>
+                    <th>مبلغ الحوالة</th>
+                    <th>للزبون</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {daily.sentToday.map((t) => (
+                    <tr key={t.id}>
+                      <td className="ref-cell">{t.reference}</td>
+                      <td>{(customersById || new Map()).get(t.customerId)?.name || t.receiverName}</td>
+                      <td>{t.senderName}</td>
+                      <td className="date-cell">{formatTime(t.sentAt)}</td>
+                      <td className="amount-info">{t.transferAmount === null ? '-' : money(t.transferAmount)}</td>
+                      <td>{t.customerAmount === null ? '-' : money(t.customerAmount)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : null}
+
         {/* ── حوالات تم سحبها اليوم ── */}
         {daily.pickedUpToday.length > 0 ? (
           <div className="closing-section">

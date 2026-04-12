@@ -61,6 +61,14 @@ export function computeDailyClosing(transfers, customerSummary, officeSummary, c
   )
   const claimsValueToday = claimsToday.reduce((sum, claim) => sum + Math.abs(claim.amount || 0), 0)
 
+  // Include transfers that went through issue status today but were later reset
+  const issueFromHistory = transfers.filter((t) =>
+    Array.isArray(t.history) &&
+    t.history.some((h) => h.field === 'status' && h.to === 'issue' && isOnDate(h.at, date)) &&
+    !isOnDate(t.issueAt, date),
+  )
+  const allIssueToday = [...issueToday, ...issueFromHistory]
+
   return {
     date,
     customerSnapshot: {
@@ -77,7 +85,7 @@ export function computeDailyClosing(transfers, customerSummary, officeSummary, c
       createdCount: createdToday.length,
       sentCount: sentToday.length,
       pickedUpCount: pickedUpToday.length,
-      issueCount: issueToday.length,
+      issueCount: allIssueToday.length,
       reviewHoldCount: reviewHoldToday.length,
       resetCount: resetToday.length,
       settledCount: settledToday.length,
@@ -86,9 +94,9 @@ export function computeDailyClosing(transfers, customerSummary, officeSummary, c
       officeProfitRealizedToday,
       claimsValueToday,
       createdToday: createdToday.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
-      sentToday,
+      sentToday: sentToday.sort((a, b) => new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime()),
       pickedUpToday,
-      issueToday,
+      issueToday: allIssueToday,
       settledToday,
     },
     accountantSnapshot: {
