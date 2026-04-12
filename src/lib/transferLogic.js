@@ -17,7 +17,7 @@ export function createEmptyTransferDraft() {
 }
 
 export function createEmptyCustomerDraft() {
-  return { name: '', openingBalance: '', settledTotal: '' }
+  return { name: '', openingBalance: '', openingTransferCount: '', settledTotal: '' }
 }
 
 /* ── Normalization ── */
@@ -63,6 +63,7 @@ export function buildCustomerFromDraft(draft, existingCustomers = []) {
       id: now.getTime(),
       name,
       openingBalance: parseMoney(draft.openingBalance),
+      openingTransferCount: Math.max(0, Math.trunc(parseMoney(draft.openingTransferCount))),
       settledTotal: parseMoney(draft.settledTotal),
       createdAt: now.toISOString(),
       updatedAt: now.toISOString(),
@@ -240,9 +241,14 @@ export function updateTransferField(item, field, value) {
 
 export function updateCustomerField(item, field, value) {
   const isMoneyField = field === 'openingBalance' || field === 'settledTotal'
+  const isCountField = field === 'openingTransferCount'
   return {
     ...item,
-    [field]: isMoneyField ? parseMoney(value) : value,
+    [field]: isMoneyField
+      ? parseMoney(value)
+      : isCountField
+        ? Math.max(0, Math.trunc(parseMoney(value)))
+        : value,
     updatedAt: new Date().toISOString(),
   }
 }
@@ -425,6 +431,8 @@ export function summarizeCustomers(customers, transfers, ledgerEntries = []) {
         ledgerDebits: 0,
         manualEntriesCount: 0,
         ledgerEntriesCount: 0,
+        openingOutstandingAmount: 0,
+        openingOutstandingTransferCount: 0,
       }
 
       return {
@@ -436,15 +444,17 @@ export function summarizeCustomers(customers, transfers, ledgerEntries = []) {
         reviewHoldCount: own.filter((t) => t.status === 'review_hold').length,
         issueCount: own.filter((t) => t.status === 'issue').length,
         settledCount: settled.length,
-        unsettledCount: unsettled.length,
+        unsettledCount: unsettled.length + ledger.openingOutstandingTransferCount,
         settledAmount,
-        unsettledAmount,
+        unsettledAmount: unsettledAmount + ledger.openingOutstandingAmount,
         totalMargin,
         currentBalance: ledger.currentBalance,
         ledgerCredits: ledger.ledgerCredits,
         ledgerDebits: ledger.ledgerDebits,
         manualEntriesCount: ledger.manualEntriesCount,
         ledgerEntriesCount: ledger.ledgerEntriesCount,
+        openingOutstandingAmount: ledger.openingOutstandingAmount,
+        openingOutstandingTransferCount: ledger.openingOutstandingTransferCount,
       }
     })
     .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ar'))
@@ -520,6 +530,7 @@ export function parseAppStateBackup(text) {
   return migrateState({
     customers: parsed.customers.map((c) => ({
       openingBalance: 0,
+      openingTransferCount: 0,
       settledTotal: 0,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),

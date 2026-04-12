@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { statusMeta } from '../sampleData'
-import { computeDailyClosing, getAvailableDates, getTodayKey } from '../lib/dailyClosing'
+import { computeDailyClosing, getAvailableDates, getTodayKey, resolveClosingView } from '../lib/dailyClosing'
 
 const currency = new Intl.NumberFormat('en-US', {
   style: 'currency',
@@ -51,6 +51,7 @@ export default function DailyClosingTab({
   onSaveClosing,
 }) {
   const [selectedDate, setSelectedDate] = useState(getTodayKey)
+  const [preferSavedSnapshot, setPreferSavedSnapshot] = useState(false)
   const isToday = selectedDate === getTodayKey()
   const availableDates = useMemo(
     () => getAvailableDates(transfers, claimHistory, dailyClosings),
@@ -65,8 +66,8 @@ export default function DailyClosingTab({
     () => (dailyClosings || []).find((item) => item.date === selectedDate) || null,
     [dailyClosings, selectedDate],
   )
-  const closing = !isToday && savedClosing?.snapshot ? savedClosing.snapshot : liveClosing
-  const usingSavedSnapshot = !isToday && Boolean(savedClosing?.snapshot)
+  const closing = resolveClosingView(liveClosing, savedClosing, preferSavedSnapshot)
+  const usingSavedSnapshot = Boolean(preferSavedSnapshot && savedClosing?.snapshot)
 
   const daily = closing.officeDaily
 
@@ -80,7 +81,10 @@ export default function DailyClosingTab({
             <select
               className="closing-date-select"
               value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
+              onChange={(e) => {
+                setSelectedDate(e.target.value)
+                setPreferSavedSnapshot(false)
+              }}
             >
               {availableDates.length === 0 ? (
                 <option value={selectedDate}>{selectedDate}</option>
@@ -364,8 +368,8 @@ export default function DailyClosingTab({
                       <td className="ref-cell">{t.reference}</td>
                       <td>{(customersById || new Map()).get(t.customerId)?.name || t.receiverName}</td>
                       <td>{t.senderName}</td>
-                      <td>{t.issueCode || '-'}</td>
-                      <td>{t.note || '-'}</td>
+                      <td>{t.issueCodeAt || '-'}</td>
+                      <td>{t.noteAt || '-'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -406,7 +410,10 @@ export default function DailyClosingTab({
                       <td>
                         <button
                           className="ghost-button ghost-button--small"
-                          onClick={() => setSelectedDate(record.date)}
+                          onClick={() => {
+                            setSelectedDate(record.date)
+                            setPreferSavedSnapshot(true)
+                          }}
                         >
                           عرض
                         </button>

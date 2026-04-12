@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { groupUnsettledTransfersByCustomer } from '../lib/ledger'
+import { groupPendingSettlementItems } from '../lib/ledger'
 
 const currency = new Intl.NumberFormat('en-US', {
   style: 'currency',
@@ -21,34 +21,35 @@ function formatDate(value) {
   }).format(new Date(value))
 }
 
-export default function SettlementsTab({ customers, transfers, onSettle }) {
+export default function SettlementsTab({ customers, transfers, ledgerEntries, onSettle }) {
   const [selectedIds, setSelectedIds] = useState(new Set())
   const groups = useMemo(
-    () => groupUnsettledTransfersByCustomer(customers, transfers),
-    [customers, transfers],
+    () => groupPendingSettlementItems(customers, transfers, ledgerEntries),
+    [customers, ledgerEntries, transfers],
   )
 
   const totals = useMemo(() => {
-    const selectedTransfers = transfers.filter((item) => selectedIds.has(item.id))
+    const selectedTransfers = groups.flatMap((group) => group.items).filter((item) => selectedIds.has(String(item.id)))
     return {
       count: selectedTransfers.length,
       system: selectedTransfers.reduce((sum, item) => sum + (item.systemAmount || 0), 0),
       customer: selectedTransfers.reduce((sum, item) => sum + (item.customerAmount || 0), 0),
       margin: selectedTransfers.reduce((sum, item) => sum + (item.margin || 0), 0),
     }
-  }, [selectedIds, transfers])
+  }, [groups, selectedIds])
 
   function toggleTransfer(id) {
     setSelectedIds((prev) => {
       const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
+      const normalizedId = String(id)
+      if (next.has(normalizedId)) next.delete(normalizedId)
+      else next.add(normalizedId)
       return next
     })
   }
 
   function toggleGroup(group) {
-    const groupIds = group.items.map((item) => item.id)
+    const groupIds = group.items.map((item) => String(item.id))
 
     setSelectedIds((prev) => {
       const allSelected = groupIds.every((id) => prev.has(id))
@@ -62,7 +63,7 @@ export default function SettlementsTab({ customers, transfers, onSettle }) {
   }
 
   function selectAll() {
-    setSelectedIds(new Set(groups.flatMap((group) => group.items.map((item) => item.id))))
+    setSelectedIds(new Set(groups.flatMap((group) => group.items.map((item) => String(item.id)))))
   }
 
   function clearSelection() {
@@ -94,7 +95,7 @@ export default function SettlementsTab({ customers, transfers, onSettle }) {
 
       <div className="closing-grid">
         <div className="closing-card">
-          <span>الحوالات المحددة</span>
+          <span>العناصر المحددة</span>
           <strong>{totals.count}</strong>
         </div>
         <div className="closing-card">
@@ -112,7 +113,7 @@ export default function SettlementsTab({ customers, transfers, onSettle }) {
       </div>
 
       {groups.length === 0 ? (
-        <div className="empty-state">لا توجد حوالات مسحوبة بانتظار التسوية</div>
+        <div className="empty-state">لا توجد عناصر بانتظار التسوية</div>
       ) : (
         groups.map((group) => {
           const groupIds = group.items.map((item) => item.id)
@@ -124,7 +125,9 @@ export default function SettlementsTab({ customers, transfers, onSettle }) {
               <div className="issue-group-header">
                 <div className="settlement-group-headline">
                   <strong>{group.customerName}</strong>
-                  <span className="count-badge">{group.items.length}</span>
+                  <span className="count-badge">
+                    {group.items.reduce((sum, item) => sum + (item.openingTransferCount || 1), 0)}
+                  </span>
                 </div>
                 <div className="settlement-group-totals">
                   <span>من الموظف: {money(group.systemTotal)}</span>
@@ -140,30 +143,32 @@ export default function SettlementsTab({ customers, transfers, onSettle }) {
                 <table>
                   <thead>
                     <tr>
-                      <th>اختيار</th>
-                      <th>الرقم</th>
-                      <th>المرسل</th>
-                      <th>التاريخ</th>
-                      <th>من الموظف</th>
-                      <th>للزبون</th>
-                      <th>الربح</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {group.items.map((item) => (
-                      <tr key={item.id}>
-                        <td>
-                          <input
-                            type="checkbox"
-                            checked={selectedIds.has(item.id)}
-                            onChange={() => toggleTransfer(item.id)}
-                          />
-                        </td>
-                        <td className="ref-cell">{item.reference}</td>
-                        <td>{item.senderName}</td>
-                        <td className="date-cell">{formatDate(item.createdAt)}</td>
-                        <td>{money(item.systemAmount)}</td>
-                        <td>{money(item.customerAmount)}</td>
+                    <th>اختيار</th>
+                    <th>النوع</th>
+                    <th>الرقم</th>
+                    <th>البيان</th>
+                    <th>التاريخ</th>
+                    <th>من الموظف</th>
+                    <th>للزبون</th>
+                    <th>الربح</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {group.items.map((item) => (
+                    <tr key={item.id}>
+                      <td>
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(String(item.id))}
+                          onChange={() => toggleTransfer(item.id)}
+                        />
+                      </td>
+                      <td>{item.kind === 'opening_balance' ? 'افتتاحي' : 'حوالة'}</td>
+                      <td className="ref-cell">{item.reference}</td>
+                      <td>{item.senderName}</td>
+                      <td className="date-cell">{formatDate(item.createdAt)}</td>
+                      <td>{money(item.systemAmount)}</td>
+                      <td>{money(item.customerAmount)}</td>
                         <td>{money(item.margin)}</td>
                       </tr>
                     ))}

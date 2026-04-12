@@ -21,9 +21,11 @@ import {
   buildCustomerStatement,
   buildLegacySettlementEntry,
   buildOpeningBalanceEntry,
+  createOpeningSettlementEntry,
   buildSeedLedgerEntries,
   buildTransferLedgerEntries,
   createProfitClaimEntry,
+  groupPendingSettlementItems,
   groupUnsettledTransfersByCustomer,
   LEDGER_ENTRY_TYPES,
   summarizeOfficeLedger,
@@ -34,11 +36,11 @@ import {
  * ══════════════════════════════════════════════════════ */
 
 const omar = {
-  id: 201, name: 'عمر', openingBalance: 1000, settledTotal: 200,
+  id: 201, name: 'عمر', openingBalance: 1000, openingTransferCount: 4, settledTotal: 200,
   createdAt: '2026-04-12T06:00:00.000Z', updatedAt: '2026-04-12T06:00:00.000Z',
 }
 const sara = {
-  id: 202, name: 'سارة', openingBalance: 0, settledTotal: 0,
+  id: 202, name: 'سارة', openingBalance: 0, openingTransferCount: 0, settledTotal: 0,
   createdAt: '2026-04-12T06:00:00.000Z', updatedAt: '2026-04-12T06:00:00.000Z',
 }
 const customers = [omar, sara]
@@ -100,17 +102,18 @@ describe('الأساسيات', () => {
 
 describe('بناء الزبائن والحوالات', () => {
   it('يرفض زبون بدون اسم', () => {
-    expect(buildCustomerFromDraft({ name: '', openingBalance: '', settledTotal: '' }, []).ok).toBe(false)
+    expect(buildCustomerFromDraft({ name: '', openingBalance: '', openingTransferCount: '', settledTotal: '' }, []).ok).toBe(false)
   })
 
   it('يرفض زبون مكرر', () => {
-    expect(buildCustomerFromDraft({ name: 'عمر', openingBalance: '0', settledTotal: '0' }, customers).ok).toBe(false)
+    expect(buildCustomerFromDraft({ name: 'عمر', openingBalance: '0', openingTransferCount: '0', settledTotal: '0' }, customers).ok).toBe(false)
   })
 
   it('يقبل زبون جديد بأرقام صحيحة', () => {
-    const r = buildCustomerFromDraft({ name: 'خالد', openingBalance: '500', settledTotal: '100' }, customers)
+    const r = buildCustomerFromDraft({ name: 'خالد', openingBalance: '500', openingTransferCount: '3', settledTotal: '100' }, customers)
     expect(r.ok).toBe(true)
     expect(r.value.openingBalance).toBe(500)
+    expect(r.value.openingTransferCount).toBe(3)
     expect(r.value.settledTotal).toBe(100)
   })
 
@@ -369,6 +372,7 @@ describe('دفتر الحسابات', () => {
   it('buildOpeningBalanceEntry ينشئ قيد لرصيد موجب ويتجاهل الصفر', () => {
     expect(buildOpeningBalanceEntry(omar)).not.toBeNull()
     expect(buildOpeningBalanceEntry(omar).amount).toBe(1000)
+    expect(buildOpeningBalanceEntry(omar).transferCount).toBe(4)
     expect(buildOpeningBalanceEntry(sara)).toBeNull()
   })
 
@@ -470,8 +474,10 @@ describe('الملخصات والربط بين الأقسام', () => {
     expect(o.withEmployeeCount).toBe(1)
     expect(o.pickedUpCount).toBe(2)
     expect(o.settledCount).toBe(1)
-    expect(o.unsettledCount).toBe(1)
-    expect(o.unsettledAmount).toBe(660)
+    expect(o.unsettledCount).toBe(5)
+    expect(o.unsettledAmount).toBe(1460)
+    expect(o.openingOutstandingAmount).toBe(800)
+    expect(o.openingOutstandingTransferCount).toBe(4)
     expect(o.settledAmount).toBe(280)
     // ledger: 1000 - 200 + 660 + 280 - 280 = 1460
     expect(o.currentBalance).toBe(1460)
@@ -492,14 +498,14 @@ describe('الملخصات والربط بين الأقسام', () => {
   it('ملخص المكتب — كل الأرقام متسقة', () => {
     const office = summarizeOfficeLedger(customers, txs, seeds)
     expect(office.officeCustomerLiability).toBe(1460 + 420)      // 1880
-    expect(office.accountantSystemReceived).toBe(1405)
-    expect(office.accountantCustomerPaid).toBe(280)              // settled
-    expect(office.accountantOutstandingCustomer).toBe(1080)      // unsettled
+    expect(office.accountantSystemReceived).toBe(1000 + 1405)
+    expect(office.accountantCustomerPaid).toBe(200 + 280)        // legacy + settled
+    expect(office.accountantOutstandingCustomer).toBe(1880)
     expect(office.accountantGrossMargin).toBe(45)
     expect(office.accountantRealizedMargin).toBe(10)             // from T-404 only
     expect(office.accountantClaimableProfit).toBe(10)
     expect(office.accountantPendingProfit).toBe(35)
-    // cashOnHand = 1405 - 280 - 1080 - 0 = 45
+    // cashOnHand = 2405 - 480 - 1880 - 0 = 45
     expect(office.accountantCashOnHand).toBe(45)
   })
 
@@ -531,8 +537,8 @@ describe('الملخصات والربط بين الأقسام', () => {
   it('المعادلة الحسابية بعد تسوية كاملة', () => {
     const settled = settleTransfers(txs, [403, 406])
     const office = summarizeOfficeLedger(customers, settled, seeds)
-    expect(office.accountantOutstandingCustomer).toBe(0)
-    expect(office.accountantCustomerPaid).toBe(280 + 660 + 420)  // 1360
+    expect(office.accountantOutstandingCustomer).toBe(800)
+    expect(office.accountantCustomerPaid).toBe(200 + 280 + 660 + 420)  // 1560
     expect(office.accountantRealizedMargin).toBe(45)
     expect(office.accountantClaimableProfit).toBe(45)
     expect(office.accountantCashOnHand).toBe(45)
@@ -554,6 +560,28 @@ describe('الملخصات والربط بين الأقسام', () => {
     const saraGroup = groups.find((g) => g.customerName === 'سارة')
     expect(saraGroup.items).toHaveLength(1) // T-406
     expect(saraGroup.customerTotal).toBe(420)
+  })
+
+  it('groupPendingSettlementItems يضم الرصيد الافتتاحي ضمن انتظار التسوية', () => {
+    const groups = groupPendingSettlementItems(customers, txs, seeds)
+    const omarGroup = groups.find((g) => g.customerName === 'عمر')
+    expect(omarGroup.items[0].kind).toBe('opening_balance')
+    expect(omarGroup.items[0].openingTransferCount).toBe(4)
+    expect(omarGroup.customerTotal).toBe(1460)
+  })
+
+  it('تسوية الرصيد الافتتاحي تقلل المستحق والعدد الافتتاحي', () => {
+    const openingSettlement = createOpeningSettlementEntry(201, 800, 4)
+    const office = summarizeOfficeLedger(customers, txs, [...seeds, openingSettlement])
+    const cs = summarizeCustomers(customers, txs, [...seeds, openingSettlement])
+    const omarSummary = cs.find((c) => c.id === 201)
+
+    expect(office.accountantOutstandingCustomer).toBe(1080)
+    expect(office.accountantCustomerPaid).toBe(200 + 800 + 280)
+    expect(omarSummary.openingOutstandingAmount).toBe(0)
+    expect(omarSummary.openingOutstandingTransferCount).toBe(0)
+    expect(omarSummary.unsettledAmount).toBe(660)
+    expect(omarSummary.unsettledCount).toBe(1)
   })
 })
 

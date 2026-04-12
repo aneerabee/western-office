@@ -17,7 +17,14 @@ import {
   summarizeCustomers,
   summarizeTransfers,
 } from './lib/transferLogic'
-import { buildOpeningBalanceEntry, buildLegacySettlementEntry, createProfitClaimEntry, summarizeOfficeLedger } from './lib/ledger'
+import {
+  buildOpeningBalanceEntry,
+  buildLegacySettlementEntry,
+  createOpeningSettlementEntry,
+  createProfitClaimEntry,
+  summarizeLedgerByCustomer,
+  summarizeOfficeLedger,
+} from './lib/ledger'
 import { getPersistenceMode, loadPersistedState, savePersistedState } from './lib/persistence'
 import TabNav from './components/TabNav'
 import TransfersTab from './components/TransfersTab'
@@ -190,11 +197,34 @@ function App() {
 
   function handleSettle(transferIds) {
     if (!window.confirm(`تأكيد تسوية ${transferIds.length} حوالة؟`)) return
-    setState((s) => ({
-      ...s,
-      transfers: settleTransfers(s.transfers, transferIds),
-    }))
-    setFeedback(`تمت تسوية ${transferIds.length} حوالة.`)
+    setState((s) => {
+      const transferOnlyIds = transferIds
+        .filter((id) => !String(id).startsWith('opening:'))
+        .map((id) => Number(id))
+      const openingCustomerIds = transferIds
+        .filter((id) => String(id).startsWith('opening:'))
+        .map((id) => Number(String(id).split(':')[1]))
+
+      const ledgerSummary = summarizeLedgerByCustomer(s.customers, s.transfers, s.ledgerEntries)
+      const openingEntries = openingCustomerIds
+        .map((customerId) => {
+          const ledger = ledgerSummary.get(customerId)
+          if (!ledger || ledger.openingOutstandingAmount <= 0) return null
+          return createOpeningSettlementEntry(
+            customerId,
+            ledger.openingOutstandingAmount,
+            ledger.openingOutstandingTransferCount,
+          )
+        })
+        .filter(Boolean)
+
+      return {
+        ...s,
+        transfers: settleTransfers(s.transfers, transferOnlyIds),
+        ledgerEntries: openingEntries.length > 0 ? [...s.ledgerEntries, ...openingEntries] : s.ledgerEntries,
+      }
+    })
+    setFeedback(`تمت تسوية ${transferIds.length} عنصر.`)
   }
 
   function handleClaimProfit() {
@@ -268,6 +298,84 @@ function App() {
     }))
     setCustomerDraft(createEmptyCustomerDraft())
     setFeedback('تمت إضافة الزبون.')
+  }
+
+  function handleUpdateCustomer(customerId, patch) {
+    // patch = { name?, openingBalance?, settledTotal?, openingTransferCount? }
+    const trimmedName = typeof patch.name === 'string' ? patch.name.trim().replace(/\s+/g, ' ') : null
+    if (trimmedName !== null && !trimmedName) {
+      setFeedback('اسم الزبون لا يمكن أن يكون فارغاً.')
+      return
+    }
+    const dupName = trimmedName && customers.some(
+      (c) => c.id !== customerId && c.name.toLowerCase() === trimmedName.toLowerCase(),
+    )
+    if (dupName) {
+      setFeedback('اسم الزبون موجود مسبقاً.')
+      return
+    }
+
+    setState((s) => {
+      const now = new Date().toISOString()
+      const updatedCustomers = s.customers.map((c) => {
+        if (c.id !== customerId) return c
+        return {
+          ...c,
+          name: trimmedName ?? c.name,
+          openingBalance: patch.openingBalance !== undefined
+            ? Number(patch.openingBalance) || 0
+            : c.openingBalance,
+          settledTotal: patch.settledTotal !== undefined
+            ? Number(patch.settledTotal) || 0
+            : c.settledTotal,
+          openingTransferCount: patch.openingTransferCount !== undefined
+            ? Math.max(0, Math.trunc(Number(patch.openingTransferCount) || 0))
+            : (c.openingTransferCount || 0),
+          updatedAt: now,
+        }
+      })
+
+      const updatedCustomer = updatedCustomers.find((c) => c.id === customerId)
+
+      // Rebuild opening/legacy ledger entries for this customer only
+      const otherEntries = s.ledgerEntries.filter((entry) =>
+        entry.customerId !== customerId ||
+        (entry.type !== 'opening_balance' && entry.type !== 'legacy_settlement'),
+      )
+      const newOpening = buildOpeningBalanceEntry(updatedCustomer)
+      const newLegacy = buildLegacySettlementEntry(updatedCustomer)
+      const rebuiltEntries = [newOpening, newLegacy].filter(Boolean)
+
+      return {
+        ...s,
+        customers: updatedCustomers,
+        ledgerEntries: [...otherEntries, ...rebuiltEntries],
+      }
+    })
+
+    setFeedback('تم تعديل الزبون.')
+  }
+
+  function handleDeleteCustomer(customerId) {
+    const customer = customers.find((c) => c.id === customerId)
+    if (!customer) return
+
+    // Block deletion if customer has any transfers
+    const hasTransfers = transfers.some((t) => t.customerId === customerId)
+    if (hasTransfers) {
+      setFeedback(`لا يمكن حذف "${customer.name}" — لديه حوالات مرتبطة. احذف الحوالات أولاً.`)
+      return
+    }
+
+    if (!window.confirm(`حذف الزبون "${customer.name}" نهائياً؟ لا يمكن التراجع.`)) return
+
+    setState((s) => ({
+      ...s,
+      customers: s.customers.filter((c) => c.id !== customerId),
+      // Remove ALL ledger entries belonging to this customer (opening, legacy, opening_settlements)
+      ledgerEntries: s.ledgerEntries.filter((entry) => entry.customerId !== customerId),
+    }))
+    setFeedback(`تم حذف الزبون "${customer.name}".`)
   }
 
   function handleAddTransfer(e) {
@@ -433,6 +541,8 @@ function App() {
           customerDraft={customerDraft}
           setCustomerDraft={setCustomerDraft}
           onAddCustomer={handleAddCustomer}
+          onUpdateCustomer={handleUpdateCustomer}
+          onDeleteCustomer={handleDeleteCustomer}
           transfers={transfers}
           onPatchTransfer={patchTransfer}
           onFeedback={setFeedback}
@@ -444,6 +554,7 @@ function App() {
         <SettlementsTab
           customers={customers}
           transfers={transfers}
+          ledgerEntries={ledgerEntries}
           onSettle={handleSettle}
         />
       ) : null}

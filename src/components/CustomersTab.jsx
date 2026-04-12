@@ -113,6 +113,8 @@ export default function CustomersTab({
   customerDraft,
   setCustomerDraft,
   onAddCustomer,
+  onUpdateCustomer,
+  onDeleteCustomer,
   transfers,
   onPatchTransfer,
   onFeedback,
@@ -120,6 +122,32 @@ export default function CustomersTab({
 }) {
   const [viewMode, setViewMode] = useState(null)
   const [viewCustomerId, setViewCustomerId] = useState(null)
+  const [editingCustomerId, setEditingCustomerId] = useState(null)
+  const [editDraft, setEditDraft] = useState({ name: '', openingBalance: '', settledTotal: '', openingTransferCount: '' })
+
+  function startEdit(customer) {
+    setEditingCustomerId(customer.id)
+    setEditDraft({
+      name: customer.name || '',
+      openingBalance: String(customer.openingBalance ?? ''),
+      settledTotal: String(customer.settledTotal ?? ''),
+      openingTransferCount: String(customer.openingTransferCount ?? ''),
+    })
+  }
+
+  function cancelEdit() {
+    setEditingCustomerId(null)
+  }
+
+  function saveEdit(customerId) {
+    onUpdateCustomer(customerId, {
+      name: editDraft.name,
+      openingBalance: editDraft.openingBalance,
+      settledTotal: editDraft.settledTotal,
+      openingTransferCount: editDraft.openingTransferCount,
+    })
+    setEditingCustomerId(null)
+  }
 
   function openTransfers(customerId) {
     if (viewMode === 'transfers' && viewCustomerId === customerId) {
@@ -171,6 +199,12 @@ export default function CustomersTab({
           value={customerDraft.openingBalance}
           onChange={(e) => setCustomerDraft((c) => ({ ...c, openingBalance: e.target.value }))}
           placeholder="رصيد بداية"
+        />
+        <input
+          inputMode="numeric"
+          value={customerDraft.openingTransferCount}
+          onChange={(e) => setCustomerDraft((c) => ({ ...c, openingTransferCount: e.target.value }))}
+          placeholder="عدد حوالات البداية"
         />
         <button type="submit">إضافة زبون</button>
       </form>
@@ -225,6 +259,10 @@ export default function CustomersTab({
                     <strong className="balance-cell">{money(c.currentBalance)}</strong>
                   </div>
                   <div className="mini-stat">
+                    <span>افتتاحي</span>
+                    <strong>{c.openingOutstandingTransferCount}</strong>
+                  </div>
+                  <div className="mini-stat">
                     <span>غير مدفوع</span>
                     <strong className="text-orange">{money(c.unsettledAmount)}</strong>
                   </div>
@@ -235,10 +273,54 @@ export default function CustomersTab({
                     className={`action-btn ${isStatementOpen ? 'action-btn--active' : 'action-btn--blue'}`}
                     onClick={() => openStatement(c.id)}
                   >
-                    {isStatementOpen ? 'إخفاء الكشف' : 'كشف حساب'}
+                    {isStatementOpen ? 'إخفاء الكشف' : 'كشف'}
+                  </button>
+                  <button
+                    className="action-btn ghost-button"
+                    onClick={() => startEdit(c)}
+                  >
+                    تعديل
+                  </button>
+                  <button
+                    className="action-btn action-btn--red"
+                    onClick={() => onDeleteCustomer(c.id)}
+                  >
+                    حذف
                   </button>
                 </div>
               </div>
+
+              {editingCustomerId === c.id ? (
+                <div className="customer-edit-box">
+                  <div className="inline-form">
+                    <input
+                      value={editDraft.name}
+                      onChange={(e) => setEditDraft((d) => ({ ...d, name: e.target.value }))}
+                      placeholder="اسم الزبون"
+                    />
+                    <input
+                      inputMode="decimal"
+                      value={editDraft.openingBalance}
+                      onChange={(e) => setEditDraft((d) => ({ ...d, openingBalance: e.target.value }))}
+                      placeholder="رصيد افتتاحي"
+                    />
+                    <input
+                      inputMode="numeric"
+                      value={editDraft.openingTransferCount}
+                      onChange={(e) => setEditDraft((d) => ({ ...d, openingTransferCount: e.target.value }))}
+                      placeholder="عدد حوالات البداية"
+                    />
+                    <input
+                      inputMode="decimal"
+                      value={editDraft.settledTotal}
+                      onChange={(e) => setEditDraft((d) => ({ ...d, settledTotal: e.target.value }))}
+                      placeholder="مُسوّى سابقاً"
+                    />
+                    <button className="action-btn action-btn--green" onClick={() => saveEdit(c.id)}>حفظ</button>
+                    <button className="ghost-button" onClick={cancelEdit}>إلغاء</button>
+                  </div>
+                </div>
+              ) : null}
 
               {isTransfersOpen ? (
                 <div className="customer-transfers-box">

@@ -384,9 +384,11 @@ thead th {
 .mini-stat strong { font-size: 0.95rem; }
 .mini-stat small { font-size: 0.68rem; color: var(--ink-faint); }
 
-.customer-transfers-box, .settlement-box {
+.customer-transfers-box, .settlement-box, .customer-edit-box {
   border-top: 1px solid var(--border); padding: 10px 12px; background: var(--bg);
 }
+
+.customer-edit-box .inline-form { margin-bottom: 0; }
 
 .customer-transfers-header {
   font-weight: 700; font-size: 0.85rem; color: var(--ink-soft);

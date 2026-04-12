@@ -115,24 +115,29 @@ function rowsByActivityType(activityRows, type) {
     .sort((a, b) => new Date(b.activityAtByType[type]).getTime() - new Date(a.activityAtByType[type]).getTime())
 }
 
-// Get the field value as it was at the time of a specific activity.
-// If the transfer was reset AFTER the activity, the current value is null —
-// we must recover the value from history[].
-function getFieldAtActivity(transfer, field, activityAt) {
+export function getFieldAtActivity(transfer, field, activityAt) {
   const current = transfer?.[field]
-  if (current !== null && current !== undefined) return current
+  if (!Array.isArray(transfer?.history) || transfer.history.length === 0) {
+    return current ?? null
+  }
 
-  // Walk history backward looking for the last value set before or at activityAt
-  if (!Array.isArray(transfer?.history)) return null
   const activityTime = new Date(activityAt).getTime()
   let lastValue = null
+  let hasLaterChange = false
+
   for (const entry of transfer.history) {
     if (entry?.field !== field) continue
     const entryTime = new Date(entry.at).getTime()
-    if (entryTime > activityTime) break
+    if (entryTime > activityTime) {
+      hasLaterChange = true
+      break
+    }
     if (entry.to !== null && entry.to !== undefined) lastValue = entry.to
   }
-  return lastValue
+
+  if (lastValue !== null) return lastValue
+  if (!hasLaterChange && current !== null && current !== undefined) return current
+  return null
 }
 
 function sumTransferAmount(rows, field, activityType) {
@@ -154,12 +159,20 @@ export function createDailyClosingRecord(closing) {
   }
 }
 
+export function resolveClosingView(liveClosing, savedClosing, preferSaved = false) {
+  return preferSaved && savedClosing?.snapshot ? savedClosing.snapshot : liveClosing
+}
+
 export function computeDailyClosing(transfers, customerSummary, officeSummary, claimHistory, date) {
   const activityToday = buildActivityRows(transfers, date)
   const createdToday = rowsByActivityType(activityToday, 'created')
   const sentToday = rowsByActivityType(activityToday, 'sent')
   const pickedUpToday = rowsByActivityType(activityToday, 'picked_up')
-  const issueToday = rowsByActivityType(activityToday, 'issue')
+  const issueToday = rowsByActivityType(activityToday, 'issue').map((row) => ({
+    ...row,
+    issueCodeAt: getFieldAtActivity(row.transfer, 'issueCode', row.activityAtByType.issue),
+    noteAt: getFieldAtActivity(row.transfer, 'note', row.activityAtByType.issue),
+  }))
   const reviewHoldToday = rowsByActivityType(activityToday, 'review_hold')
   const resetToday = rowsByActivityType(activityToday, 'reset')
   const settledToday = rowsByActivityType(activityToday, 'settled')

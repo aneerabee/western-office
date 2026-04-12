@@ -1,6 +1,7 @@
 export const LEDGER_ENTRY_TYPES = {
   OPENING_BALANCE: 'opening_balance',
   LEGACY_SETTLEMENT: 'legacy_settlement',
+  OPENING_TRANSFER_SETTLEMENT: 'opening_transfer_settlement',
   TRANSFER_DUE: 'transfer_due',
   TRANSFER_SETTLEMENT: 'transfer_settlement',
   PROFIT_CLAIM: 'profit_claim',
@@ -13,6 +14,10 @@ export const LEDGER_ENTRY_META = {
   },
   [LEDGER_ENTRY_TYPES.LEGACY_SETTLEMENT]: {
     label: 'تسوية سابقة',
+    direction: 'debit',
+  },
+  [LEDGER_ENTRY_TYPES.OPENING_TRANSFER_SETTLEMENT]: {
+    label: 'تسوية رصيد افتتاحي',
     direction: 'debit',
   },
   [LEDGER_ENTRY_TYPES.TRANSFER_DUE]: {
@@ -44,6 +49,7 @@ function createEntry({
   amount,
   note = '',
   transferId = null,
+  transferCount = 0,
   createdAt = isoNow(),
   updatedAt = createdAt,
 }) {
@@ -54,6 +60,7 @@ function createEntry({
     amount,
     note,
     transferId,
+    transferCount,
     createdAt,
     updatedAt,
   }
@@ -68,7 +75,10 @@ export function buildOpeningBalanceEntry(customer) {
     customerId: customer.id,
     type: LEDGER_ENTRY_TYPES.OPENING_BALANCE,
     amount,
-    note: 'رصيد افتتاحي',
+    note: customer.openingTransferCount
+      ? `رصيد افتتاحي (${customer.openingTransferCount} حوالة)`
+      : 'رصيد افتتاحي',
+    transferCount: asNumber(customer.openingTransferCount),
     createdAt: customer.createdAt || isoNow(),
     updatedAt: customer.updatedAt || customer.createdAt || isoNow(),
   })
@@ -94,6 +104,24 @@ export function buildSeedLedgerEntries(customers = []) {
     const opening = buildOpeningBalanceEntry(customer)
     const settlement = buildLegacySettlementEntry(customer)
     return [opening, settlement].filter(Boolean)
+  })
+}
+
+export function createOpeningSettlementEntry(customerId, amount, transferCount = 0) {
+  const normalizedAmount = Math.abs(asNumber(amount))
+  const normalizedCount = Math.max(0, Math.trunc(asNumber(transferCount)))
+  if (!normalizedAmount) return null
+  const createdAt = isoNow()
+
+  return createEntry({
+    id: `opening-settlement-${customerId}-${createdAt}-${Math.random().toString(36).slice(2, 8)}`,
+    customerId,
+    type: LEDGER_ENTRY_TYPES.OPENING_TRANSFER_SETTLEMENT,
+    amount: -normalizedAmount,
+    note: normalizedCount ? `تسوية رصيد افتتاحي (${normalizedCount} حوالة)` : 'تسوية رصيد افتتاحي',
+    transferCount: normalizedCount,
+    createdAt,
+    updatedAt: createdAt,
   })
 }
 
@@ -151,6 +179,8 @@ export function summarizeLedgerByCustomer(customers = [], transfers = [], persis
       ledgerDebits: 0,
       manualEntriesCount: 0,
       ledgerEntriesCount: 0,
+      openingOutstandingAmount: 0,
+      openingOutstandingTransferCount: Math.max(0, Math.trunc(asNumber(customer.openingTransferCount))),
     })
   }
 
@@ -165,9 +195,32 @@ export function summarizeLedgerByCustomer(customers = [], transfers = [], persis
 
     if (
       entry.type === LEDGER_ENTRY_TYPES.OPENING_BALANCE ||
-      entry.type === LEDGER_ENTRY_TYPES.LEGACY_SETTLEMENT
+      entry.type === LEDGER_ENTRY_TYPES.LEGACY_SETTLEMENT ||
+      entry.type === LEDGER_ENTRY_TYPES.OPENING_TRANSFER_SETTLEMENT
     ) {
       bucket.manualEntriesCount += 1
+    }
+
+    if (
+      entry.type === LEDGER_ENTRY_TYPES.OPENING_BALANCE ||
+      entry.type === LEDGER_ENTRY_TYPES.LEGACY_SETTLEMENT ||
+      entry.type === LEDGER_ENTRY_TYPES.OPENING_TRANSFER_SETTLEMENT
+    ) {
+      bucket.openingOutstandingAmount += entry.amount
+    }
+
+    if (entry.type === LEDGER_ENTRY_TYPES.OPENING_TRANSFER_SETTLEMENT) {
+      bucket.openingOutstandingTransferCount = Math.max(
+        0,
+        bucket.openingOutstandingTransferCount - Math.max(0, Math.trunc(asNumber(entry.transferCount))),
+      )
+    }
+  }
+
+  for (const bucket of byCustomer.values()) {
+    bucket.openingOutstandingAmount = Math.max(bucket.openingOutstandingAmount, 0)
+    if (bucket.openingOutstandingAmount === 0) {
+      bucket.openingOutstandingTransferCount = 0
     }
   }
 
@@ -208,23 +261,28 @@ export function buildCustomerStatement(customers = [], transfers = [], persisted
 export function summarizeOfficeLedger(customers = [], transfers = [], persistedEntries = []) {
   const customerSummary = summarizeLedgerByCustomer(customers, transfers, persistedEntries)
   const pickedUp = transfers.filter((transfer) => transfer.status === 'picked_up')
-  const unsettledPickedUp = pickedUp.filter((transfer) => !transfer.settled)
+  const openingBalanceTotal = persistedEntries
+    .filter((entry) => entry.type === LEDGER_ENTRY_TYPES.OPENING_BALANCE)
+    .reduce((sum, entry) => sum + Math.max(entry.amount || 0, 0), 0)
+  const legacySettlementsTotal = persistedEntries
+    .filter((entry) => entry.type === LEDGER_ENTRY_TYPES.LEGACY_SETTLEMENT)
+    .reduce((sum, entry) => sum + Math.abs(entry.amount || 0), 0)
+  const openingSettlementsTotal = persistedEntries
+    .filter((entry) => entry.type === LEDGER_ENTRY_TYPES.OPENING_TRANSFER_SETTLEMENT)
+    .reduce((sum, entry) => sum + Math.abs(entry.amount || 0), 0)
 
   const officeCustomerLiability = [...customerSummary.values()].reduce(
     (sum, item) => sum + Math.max(item.currentBalance, 0),
     0,
   )
-  const accountantSystemReceived = pickedUp.reduce(
+  const accountantSystemReceived = openingBalanceTotal + pickedUp.reduce(
     (sum, transfer) => sum + (typeof transfer.systemAmount === 'number' ? transfer.systemAmount : 0),
     0,
   )
-  const accountantCustomerPaid = pickedUp
+  const accountantCustomerPaid = legacySettlementsTotal + openingSettlementsTotal + pickedUp
     .filter((transfer) => transfer.settled)
     .reduce((sum, transfer) => sum + (typeof transfer.customerAmount === 'number' ? transfer.customerAmount : 0), 0)
-  const accountantOutstandingCustomer = unsettledPickedUp.reduce(
-    (sum, transfer) => sum + (typeof transfer.customerAmount === 'number' ? transfer.customerAmount : 0),
-    0,
-  )
+  const accountantOutstandingCustomer = officeCustomerLiability
   const accountantGrossMargin = pickedUp.reduce(
     (sum, transfer) => sum + (typeof transfer.margin === 'number' ? transfer.margin : 0),
     0,
@@ -261,7 +319,12 @@ export function summarizeOfficeLedger(customers = [], transfers = [], persistedE
 }
 
 export function groupUnsettledTransfersByCustomer(customers = [], transfers = []) {
+  return groupPendingSettlementItems(customers, transfers, [])
+}
+
+export function groupPendingSettlementItems(customers = [], transfers = [], persistedEntries = []) {
   const customersById = new Map(customers.map((customer) => [customer.id, customer]))
+  const ledgerSummary = summarizeLedgerByCustomer(customers, transfers, persistedEntries)
   const groups = new Map()
 
   for (const transfer of transfers) {
@@ -283,6 +346,41 @@ export function groupUnsettledTransfersByCustomer(customers = [], transfers = []
     group.systemTotal += asNumber(transfer.systemAmount)
     group.customerTotal += asNumber(transfer.customerAmount)
     group.marginTotal += asNumber(transfer.margin)
+  }
+
+  for (const customer of customers) {
+    const ledger = ledgerSummary.get(customer.id)
+    if (!ledger || ledger.openingOutstandingAmount <= 0) continue
+
+    if (!groups.has(customer.id)) {
+      groups.set(customer.id, {
+        customerId: customer.id,
+        customerName: customersById.get(customer.id)?.name || 'غير معروف',
+        items: [],
+        systemTotal: 0,
+        customerTotal: 0,
+        marginTotal: 0,
+      })
+    }
+
+    const group = groups.get(customer.id)
+    group.items.unshift({
+      id: `opening:${customer.id}`,
+      customerId: customer.id,
+      reference: 'رصيد افتتاحي',
+      senderName: ledger.openingOutstandingTransferCount
+        ? `${ledger.openingOutstandingTransferCount} حوالة سابقة`
+        : 'رصيد سابق',
+      createdAt: customer.createdAt || isoNow(),
+      systemAmount: ledger.openingOutstandingAmount,
+      customerAmount: ledger.openingOutstandingAmount,
+      margin: 0,
+      settled: false,
+      kind: 'opening_balance',
+      openingTransferCount: ledger.openingOutstandingTransferCount,
+    })
+    group.systemTotal += ledger.openingOutstandingAmount
+    group.customerTotal += ledger.openingOutstandingAmount
   }
 
   return [...groups.values()].sort((a, b) => b.customerTotal - a.customerTotal)

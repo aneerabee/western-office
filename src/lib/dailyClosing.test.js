@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { collectTransferActivity, computeDailyClosing, createDailyClosingRecord, getAvailableDates, getDateKey } from './dailyClosing'
+import {
+  collectTransferActivity,
+  computeDailyClosing,
+  createDailyClosingRecord,
+  getAvailableDates,
+  getDateKey,
+  getFieldAtActivity,
+  resolveClosingView,
+} from './dailyClosing'
 import { buildSeedLedgerEntries, createProfitClaimEntry, summarizeOfficeLedger } from './ledger'
 import { summarizeCustomers } from './transferLogic'
 
@@ -137,6 +145,42 @@ describe('dailyClosing', () => {
     expect(record.date).toBe('2026-04-11')
     expect(record.snapshot.officeDaily.settledCount).toBe(1)
     expect(record.id).toBe('daily-closing-2026-04-11')
+  })
+
+  it('يمكن فتح snapshot محفوظ حتى لو كان لنفس تاريخ اليوم المحدد', () => {
+    const liveClosing = { date: '2026-04-11', officeDaily: { createdCount: 9 } }
+    const savedClosing = { snapshot: { date: '2026-04-11', officeDaily: { createdCount: 2 } } }
+
+    expect(resolveClosingView(liveClosing, savedClosing, false)).toBe(liveClosing)
+    expect(resolveClosingView(liveClosing, savedClosing, true)).toBe(savedClosing.snapshot)
+  })
+
+  it('يسترجع تفاصيل المشكلة كما كانت وقت الحدث حتى بعد reset', () => {
+    const transfer = {
+      ...transfers[0],
+      status: 'received',
+      issueCode: '',
+      note: '',
+      issueAt: null,
+      resetAt: '2026-04-11T11:00:00.000Z',
+      history: [
+        { field: 'issueCode', from: '', to: 'name_mismatch', at: '2026-04-11T10:00:00.000Z' },
+        { field: 'note', from: '', to: 'الاسم غير مطابق', at: '2026-04-11T10:00:00.000Z' },
+        { field: 'status', from: 'with_employee', to: 'issue', at: '2026-04-11T10:01:00.000Z' },
+        { field: 'status', from: 'issue', to: 'received', at: '2026-04-11T11:00:00.000Z' },
+        { field: 'issueCode', from: 'name_mismatch', to: '', at: '2026-04-11T11:00:00.000Z' },
+        { field: 'note', from: 'الاسم غير مطابق', to: '', at: '2026-04-11T11:00:00.000Z' },
+      ],
+    }
+    const txs = [transfer]
+    const summary = summarizeCustomers(customers, txs, buildSeedLedgerEntries(customers))
+    const office = summarizeOfficeLedger(customers, txs, buildSeedLedgerEntries(customers))
+    const closing = computeDailyClosing(txs, summary, office, [], '2026-04-11')
+
+    expect(getFieldAtActivity(transfer, 'issueCode', '2026-04-11T10:01:00.000Z')).toBe('name_mismatch')
+    expect(getFieldAtActivity(transfer, 'note', '2026-04-11T10:01:00.000Z')).toBe('الاسم غير مطابق')
+    expect(closing.officeDaily.issueToday[0].issueCodeAt).toBe('name_mismatch')
+    expect(closing.officeDaily.issueToday[0].noteAt).toBe('الاسم غير مطابق')
   })
 
   it('returns zeros for empty date', () => {
