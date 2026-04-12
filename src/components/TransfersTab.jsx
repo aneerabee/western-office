@@ -76,6 +76,9 @@ export default function TransfersTab({
   const sections = sortMode === 'smart' ? groupBySections(filteredTransfers) : null
 
   function handleTransition(item, nextStatus) {
+    if (nextStatus === 'received') {
+      if (!window.confirm('إعادة الحوالة لـ "جديدة" ستمسح كل المبالغ والتواريخ. هل أنت متأكد؟')) return
+    }
     const check = validateTransition(item, nextStatus)
     if (!check.ok) {
       onFeedback(check.error)

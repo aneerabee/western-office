@@ -25,6 +25,7 @@ export default function IssuesTab({ transfers, customersById, onPatchTransfer, o
   labels.unknown = 'غير محدد'
 
   function reopenTransfer(item) {
+    if (!window.confirm('إعادة الحوالة لـ "جديدة" ستمسح كل المبالغ والتواريخ. هل أنت متأكد؟')) return
     const check = validateTransition(item, 'received')
     if (!check.ok) {
       onFeedback?.(check.error)

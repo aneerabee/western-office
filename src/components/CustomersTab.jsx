@@ -142,6 +142,9 @@ export default function CustomersTab({
   }
 
   function safeTransition(item, nextStatus) {
+    if (nextStatus === 'received') {
+      if (!window.confirm('إعادة الحوالة لـ "جديدة" ستمسح كل المبالغ والتواريخ. هل أنت متأكد؟')) return
+    }
     const check = validateTransition(item, nextStatus)
     if (!check.ok) {
       onFeedback(check.error)

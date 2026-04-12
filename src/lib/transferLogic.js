@@ -169,6 +169,12 @@ export function transitionTransfer(item, nextStatus) {
   }
 
   if (nextStatus === 'received') {
+    const resetFields = ['transferAmount', 'systemAmount', 'customerAmount', 'margin']
+    for (const f of resetFields) {
+      if (item[f] !== null && item[f] !== undefined) {
+        next.history = addHistory({ history: next.history }, f, item[f], null)
+      }
+    }
     next.resetAt = now
     next.sentAt = null
     next.pickedUpAt = null
