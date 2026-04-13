@@ -7,6 +7,7 @@ import {
   validateTransition,
 } from '../lib/transferLogic'
 import { buildCustomerStatement } from '../lib/ledger'
+import { buildCustomerWhatsappMessage, buildWhatsappUrl } from '../lib/whatsappStatement'
 import { getCustomerTheme, getCustomerMonogram } from '../lib/customerTheme'
 import { formatEditableNumber, formatMoney, normalizeNumberInput } from '../lib/formatting'
 import { getReceiverColorClass, lookupReceiverColor } from '../lib/people'
@@ -172,7 +173,7 @@ export default function CustomersTab({
   const [viewMode, setViewMode] = useState(null)
   const [viewCustomerId, setViewCustomerId] = useState(null)
   const [editingCustomerId, setEditingCustomerId] = useState(null)
-  const [editDraft, setEditDraft] = useState({ name: '', openingBalance: '', openingTransferCount: '' })
+  const [editDraft, setEditDraft] = useState({ name: '', openingBalance: '', openingTransferCount: '', phone: '' })
 
   function startEdit(customer) {
     setEditingCustomerId(customer.id)
@@ -180,6 +181,7 @@ export default function CustomersTab({
       name: customer.name || '',
       openingBalance: String(customer.openingBalance ?? ''),
       openingTransferCount: String(customer.openingTransferCount ?? ''),
+      phone: customer.phone || '',
     })
   }
 
@@ -192,6 +194,7 @@ export default function CustomersTab({
       name: editDraft.name,
       openingBalance: editDraft.openingBalance,
       openingTransferCount: editDraft.openingTransferCount,
+      phone: editDraft.phone,
     })
     setEditingCustomerId(null)
   }
@@ -255,6 +258,13 @@ export default function CustomersTab({
           value={customerDraft.openingTransferCount}
           onChange={(e) => setCustomerDraft((c) => ({ ...c, openingTransferCount: e.target.value }))}
           placeholder="عدد حوالات البداية"
+        />
+        <input
+          type="tel"
+          inputMode="tel"
+          value={customerDraft.phone || ''}
+          onChange={(e) => setCustomerDraft((c) => ({ ...c, phone: e.target.value }))}
+          placeholder="📱 رقم الواتساب (اختياري)"
         />
         <button type="submit">إضافة زبون</button>
       </form>
@@ -355,6 +365,39 @@ export default function CustomersTab({
                     <span className="customer-btn-icon">📊</span>
                     <span>كشف</span>
                   </button>
+                  {(() => {
+                    const customerObj = customers.find((cc) => cc.id === c.id)
+                    const hasPhone = Boolean(customerObj?.phone && String(customerObj.phone).trim())
+                    const handleWhatsApp = () => {
+                      if (!customerObj) return
+                      if (!hasPhone) {
+                        startEdit(c)
+                        onFeedback('أضف رقم واتساب الزبون في نموذج التعديل أولاً.')
+                        return
+                      }
+                      const message = buildCustomerWhatsappMessage({
+                        customer: customerObj,
+                        transfers: transfers.filter((t) => t.customerId === c.id),
+                        ledgerEntries: ledgerEntries.filter((e) => e.customerId === c.id),
+                      })
+                      const url = buildWhatsappUrl(customerObj.phone, message)
+                      if (!url) {
+                        onFeedback('رقم الواتساب غير صالح. عدّله أولاً.')
+                        return
+                      }
+                      window.open(url, '_blank', 'noopener,noreferrer')
+                    }
+                    return (
+                      <button
+                        className={`customer-btn ${hasPhone ? 'customer-btn--whatsapp' : ''}`}
+                        onClick={handleWhatsApp}
+                        title={hasPhone ? 'إرسال كشف حساب عبر واتساب' : 'أضف رقم واتساب أولاً'}
+                      >
+                        <span className="customer-btn-icon">📱</span>
+                        <span>واتساب</span>
+                      </button>
+                    )
+                  })()}
                   <button
                     className="customer-btn"
                     onClick={() => startEdit(c)}
@@ -429,6 +472,13 @@ export default function CustomersTab({
                       value={editDraft.openingTransferCount}
                       onChange={(e) => setEditDraft((d) => ({ ...d, openingTransferCount: e.target.value }))}
                       placeholder="عدد حوالات البداية"
+                    />
+                    <input
+                      type="tel"
+                      inputMode="tel"
+                      value={editDraft.phone}
+                      onChange={(e) => setEditDraft((d) => ({ ...d, phone: e.target.value }))}
+                      placeholder="📱 رقم الواتساب (اختياري)"
                     />
                     <button className="action-btn action-btn--green" onClick={() => saveEdit(c.id)}>حفظ</button>
                     <button className="ghost-button" onClick={cancelEdit}>إلغاء</button>

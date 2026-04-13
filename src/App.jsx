@@ -38,6 +38,8 @@ import {
   filterStateForViewer,
 } from './lib/viewerMode'
 import { buildSettlementHistory, summarizeSettlementHistory } from './lib/settlementHistory'
+import { buildAttentionAlerts } from './lib/attentionBoard'
+import AttentionBoard from './components/AttentionBoard'
 import TabNav from './components/TabNav'
 import TransfersTab from './components/TransfersTab'
 import CustomersTab from './components/CustomersTab'
@@ -468,6 +470,31 @@ function App() {
     [claimHistory, customers, ledgerEntries, transfers],
   )
 
+  // Attention board alerts — proactive list of things that need action
+  // today. Hidden in viewer mode (this is an admin-only signal).
+  const attentionAlerts = useMemo(() => {
+    if (isViewerMode) return []
+    return buildAttentionAlerts({
+      transfers,
+      customers,
+      ledgerEntries,
+      officeSummary,
+    })
+  }, [isViewerMode, transfers, customers, ledgerEntries, officeSummary])
+
+  function handleAttentionAction(action) {
+    if (!action) return
+    if (action.type === 'claim-profit') {
+      handleClaimProfit()
+      return
+    }
+    if (action.type === 'filter-transfers') {
+      changeTab('transfers')
+      if (action.search) setSearchTerm(action.search)
+      return
+    }
+  }
+
   // Viewer-mode financial summary: total amount the customer has already
   // received from settled history. Combined with officeCustomerLiability
   // (what we still owe him), this gives the viewer his complete financial
@@ -833,6 +860,9 @@ function App() {
           openingTransferCount: patch.openingTransferCount !== undefined
             ? Math.max(0, Math.trunc(Number(patch.openingTransferCount) || 0))
             : (c.openingTransferCount || 0),
+          phone: patch.phone !== undefined
+            ? String(patch.phone || '').trim()
+            : (c.phone || ''),
           updatedAt: now,
         }
       })
@@ -1193,6 +1223,10 @@ function App() {
             إخفاء
           </button>
         </div>
+      ) : null}
+
+      {!isViewerMode ? (
+        <AttentionBoard alerts={attentionAlerts} onAction={handleAttentionAction} />
       ) : null}
 
       <StatsHero

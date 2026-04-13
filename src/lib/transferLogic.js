@@ -52,7 +52,14 @@ export function createEmptyTransferBatchDraft() {
 }
 
 export function createEmptyCustomerDraft() {
-  return { name: '', openingBalance: '', openingTransferCount: '', settledTotal: '' }
+  return { name: '', openingBalance: '', openingTransferCount: '', settledTotal: '', phone: '' }
+}
+
+// Keep a raw phone string for storage — trim whitespace, preserve + and digits.
+// Normalization to digits-only happens only at the WhatsApp URL layer.
+function normalizePhoneField(value) {
+  if (value == null) return ''
+  return String(value).trim()
 }
 
 /* ── Normalization ── */
@@ -100,6 +107,7 @@ export function buildCustomerFromDraft(draft, existingCustomers = []) {
       openingBalance: parseMoney(draft.openingBalance),
       openingTransferCount: Math.max(0, Math.trunc(parseMoney(draft.openingTransferCount))),
       settledTotal: parseMoney(draft.settledTotal),
+      phone: normalizePhoneField(draft.phone),
       createdAt: now.toISOString(),
       updatedAt: now.toISOString(),
     },
