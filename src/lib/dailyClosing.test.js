@@ -144,7 +144,7 @@ describe('dailyClosing', () => {
 
     expect(record.date).toBe('2026-04-11')
     expect(record.snapshot.officeDaily.settledCount).toBe(1)
-    expect(record.id).toBe('daily-closing-2026-04-11')
+    expect(record.id.startsWith('daily-closing-2026-04-11-')).toBe(true)
   })
 
   it('يمكن فتح snapshot محفوظ حتى لو كان لنفس تاريخ اليوم المحدد', () => {

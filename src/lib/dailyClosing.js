@@ -150,8 +150,9 @@ function sumTransferAmount(rows, field, activityType) {
 
 export function createDailyClosingRecord(closing) {
   const now = new Date().toISOString()
+  const stamp = now.replace(/[:.]/g, '-')
   return {
-    id: `daily-closing-${closing.date}`,
+    id: `daily-closing-${closing.date}-${stamp}`,
     date: closing.date,
     savedAt: now,
     updatedAt: now,

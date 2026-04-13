@@ -1,6 +1,18 @@
-import { buildSeedLedgerEntries, summarizeLedgerByCustomer } from './ledger'
+import {
+  buildSeedLedgerEntries,
+  groupPendingSettlementItems,
+  summarizeLedgerByCustomer,
+} from './ledger'
 
 export const FILTER_ALL = 'all'
+
+let _idCounter = 0
+export function makeUniqueId() {
+  // Date.now() ≈ 1.76e12, *1000 = 1.76e15 (still below MAX_SAFE_INTEGER 9.0e15)
+  // Counter 0-999 per millisecond — 1000 unique ids/ms is more than enough
+  _idCounter = (_idCounter + 1) % 1000
+  return Date.now() * 1000 + _idCounter
+}
 
 export const statusOrder = ['received', 'with_employee', 'review_hold', 'picked_up', 'issue']
 
@@ -10,9 +22,32 @@ export function createEmptyTransferDraft() {
   return {
     customerId: '',
     senderName: '',
+    receiverName: '',
     reference: '',
     transferAmount: '',
     customerAmount: '',
+  }
+}
+
+function createDraftRowId() {
+  return `draft-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+export function createEmptyTransferBatchRow() {
+  return {
+    id: createDraftRowId(),
+    senderName: '',
+    receiverName: '',
+    reference: '',
+    transferAmount: '',
+    customerAmount: '',
+  }
+}
+
+export function createEmptyTransferBatchDraft() {
+  return {
+    customerId: '',
+    rows: Array.from({ length: 4 }, () => createEmptyTransferBatchRow()),
   }
 }
 
@@ -60,7 +95,7 @@ export function buildCustomerFromDraft(draft, existingCustomers = []) {
   return {
     ok: true,
     value: {
-      id: now.getTime(),
+      id: makeUniqueId(),
       name,
       openingBalance: parseMoney(draft.openingBalance),
       openingTransferCount: Math.max(0, Math.trunc(parseMoney(draft.openingTransferCount))),
@@ -73,16 +108,19 @@ export function buildCustomerFromDraft(draft, existingCustomers = []) {
 
 export function buildTransferFromDraft(draft, existingTransfers = [], customers = []) {
   const senderName = normalizeName(draft.senderName)
+  const receiverName = normalizeName(draft.receiverName)
   const reference = normalizeReference(draft.reference)
   const customerId = Number(draft.customerId)
   const customer = customers.find((c) => c.id === customerId)
 
   if (!customer) return { ok: false, error: 'يجب اختيار الزبون من القائمة.' }
   if (!senderName) return { ok: false, error: 'يجب إدخال اسم المرسل.' }
+  if (!receiverName) return { ok: false, error: 'يجب إدخال اسم المستلم.' }
   if (!reference) return { ok: false, error: 'يجب إدخال رقم الحوالة.' }
 
-  const dup = existingTransfers.some((t) => normalizeReference(t.reference) === reference)
-  if (dup) return { ok: false, error: 'رقم الحوالة موجود مسبقًا.' }
+  // Note: duplicate reference is NOT blocked here — save is allowed and
+  // both transfers get highlighted visually via the duplicateReferences set.
+  const isDuplicate = existingTransfers.some((t) => normalizeReference(t.reference) === reference)
 
   const transferAmount = draft.transferAmount === '' ? null : Number(draft.transferAmount)
   const customerAmount = draft.customerAmount === '' ? null : Number(draft.customerAmount)
@@ -90,11 +128,12 @@ export function buildTransferFromDraft(draft, existingTransfers = [], customers 
   const now = new Date()
   return {
     ok: true,
+    isDuplicate,
     value: {
-      id: now.getTime(),
+      id: makeUniqueId(),
       customerId,
       senderName,
-      receiverName: customer.name,
+      receiverName,
       reference,
       status: 'received',
       issueCode: '',
@@ -115,6 +154,97 @@ export function buildTransferFromDraft(draft, existingTransfers = [], customers 
       updatedAt: now.toISOString(),
     },
   }
+}
+
+function splitBatchTransferLine(line) {
+  if (line.includes('\t')) {
+    return line.split('\t').map((part) => part.trim())
+  }
+
+  return line.split('|').map((part) => part.trim())
+}
+
+export function buildTransfersFromBatchDraft(draft, existingTransfers = [], customers = []) {
+  const customerId = Number(draft.customerId)
+  const customer = customers.find((item) => item.id === customerId)
+  if (!customer) return { ok: false, error: 'يجب اختيار الزبون من القائمة.' }
+
+  const rows = Array.isArray(draft.rows)
+    ? draft.rows
+    : String(draft.lines ?? '')
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .map((line) => {
+          const [senderName = '', receiverName = '', reference = '', transferAmount = '', customerAmount = ''] =
+            splitBatchTransferLine(line)
+          return { senderName, receiverName, reference, transferAmount, customerAmount }
+        })
+
+  if (rows.length === 0) {
+    return { ok: false, error: 'يجب إدخال حوالة واحدة على الأقل.' }
+  }
+
+  const created = []
+
+  for (let index = 0; index < rows.length; index += 1) {
+    const row = rows[index]
+    const senderName = String(row.senderName ?? '').trim()
+    const receiverName = String(row.receiverName ?? '').trim()
+    const reference = String(row.reference ?? '').trim()
+    const transferAmount = row.transferAmount ?? ''
+    const customerAmount = row.customerAmount ?? ''
+
+    const isBlank =
+      senderName === '' &&
+      receiverName === '' &&
+      reference === '' &&
+      String(transferAmount).trim() === '' &&
+      String(customerAmount).trim() === ''
+
+    if (isBlank) continue
+
+    if (!senderName || !receiverName || !reference) {
+      return {
+        ok: false,
+        error: `السطر ${index + 1}: يجب إدخال اسم المرسل واسم المستلم ورقم الحوالة.`,
+      }
+    }
+
+    const result = buildTransferFromDraft(
+      {
+        customerId: String(customerId),
+        senderName,
+        receiverName,
+        reference,
+        transferAmount,
+        customerAmount,
+      },
+      [...existingTransfers, ...created],
+      customers,
+    )
+
+    if (!result.ok) {
+      return {
+        ok: false,
+        error: `السطر ${index + 1}: ${result.error}`,
+      }
+    }
+
+    created.push(result.value)
+  }
+
+  if (created.length === 0) {
+    return { ok: false, error: 'يجب إدخال حوالة واحدة على الأقل.' }
+  }
+
+  const duplicatesCount = created.filter((item) => {
+    const normalized = normalizeReference(item.reference)
+    return existingTransfers.some((t) => normalizeReference(t.reference) === normalized)
+      || created.filter((other) => normalizeReference(other.reference) === normalized).length > 1
+  }).length
+
+  return { ok: true, value: created, duplicatesCount }
 }
 
 /* ── Validation ── */
@@ -296,6 +426,7 @@ export function filterTransfers(transfers, filters, customersById = new Map()) {
       search === '' ||
       (t.reference || '').toLowerCase().includes(search) ||
       (t.senderName || '').toLowerCase().includes(search) ||
+      (t.receiverName || '').toLowerCase().includes(search) ||
       custName.includes(search) ||
       (t.note || '').toLowerCase().includes(search)
 
@@ -368,9 +499,10 @@ export function sortTransfers(transfers, sortMode, customersById = new Map()) {
 
 /* ── Summaries ── */
 
-export function summarizeTransfers(transfers) {
+export function summarizeTransfers(transfers, ledgerEntries = [], customers = []) {
   const pickedUp = transfers.filter((t) => t.status === 'picked_up')
-  const unsettled = pickedUp.filter((t) => !t.settled)
+  const pendingSettlementGroups = groupPendingSettlementItems(customers, transfers, ledgerEntries)
+  const pendingSettlementItems = pendingSettlementGroups.flatMap((group) => group.items)
 
   const totalSystem = pickedUp.reduce(
     (s, t) => s + (typeof t.systemAmount === 'number' ? t.systemAmount : 0), 0,
@@ -381,12 +513,13 @@ export function summarizeTransfers(transfers) {
   const totalMargin = pickedUp.reduce(
     (s, t) => s + (typeof t.margin === 'number' ? t.margin : 0), 0,
   )
-
-  const accountantPending = unsettled.reduce(
-    (s, t) => s + (typeof t.systemAmount === 'number' ? t.systemAmount : 0), 0,
+  const accountantPending = pendingSettlementGroups.reduce(
+    (sum, group) => sum + group.systemTotal,
+    0,
   )
-  const customerOwed = unsettled.reduce(
-    (s, t) => s + (typeof t.customerAmount === 'number' ? t.customerAmount : 0), 0,
+  const customerOwed = pendingSettlementGroups.reduce(
+    (sum, group) => sum + group.customerTotal,
+    0,
   )
 
   return {
@@ -397,7 +530,10 @@ export function summarizeTransfers(transfers) {
     pickedUpCount: pickedUp.length,
     issueCount: transfers.filter((t) => t.status === 'issue').length,
     settledCount: pickedUp.filter((t) => t.settled).length,
-    unsettledCount: unsettled.length,
+    unsettledCount: pendingSettlementItems.reduce(
+      (sum, item) => sum + (item.openingTransferCount || 1),
+      0,
+    ),
     totalSystem,
     totalCustomer,
     totalMargin,
@@ -510,6 +646,8 @@ export function migrateState(state) {
     : buildSeedLedgerEntries(customers)
   const claimHistory = Array.isArray(state.claimHistory) ? state.claimHistory : []
   const dailyClosings = Array.isArray(state.dailyClosings) ? state.dailyClosings : []
+  const senders = Array.isArray(state.senders) ? state.senders : []
+  const receivers = Array.isArray(state.receivers) ? state.receivers : []
 
   return {
     customers,
@@ -517,6 +655,8 @@ export function migrateState(state) {
     ledgerEntries,
     claimHistory,
     dailyClosings,
+    senders,
+    receivers,
   }
 }
 
@@ -540,6 +680,8 @@ export function parseAppStateBackup(text) {
     ledgerEntries: Array.isArray(parsed.ledgerEntries) ? parsed.ledgerEntries : undefined,
     claimHistory: Array.isArray(parsed.claimHistory) ? parsed.claimHistory : [],
     dailyClosings: Array.isArray(parsed.dailyClosings) ? parsed.dailyClosings : [],
+    senders: Array.isArray(parsed.senders) ? parsed.senders : [],
+    receivers: Array.isArray(parsed.receivers) ? parsed.receivers : [],
     transfers: parsed.transfers.map((t) => ({
       issueCode: '',
       note: '',

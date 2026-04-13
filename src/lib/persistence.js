@@ -9,6 +9,8 @@ const SUPABASE_TABLES = {
   ledgerEntries: 'wo_ledger_entries',
   claimHistory: 'wo_claim_history',
   dailyClosings: 'wo_daily_closings',
+  senders: 'wo_senders',
+  receivers: 'wo_receivers',
 }
 
 let cachedClient = null
@@ -48,7 +50,7 @@ function writeLocalState(state) {
 // Critical tables — if these fail, we abort load to prevent data loss
 const CRITICAL_TABLES = ['customers', 'transfers', 'ledgerEntries', 'claimHistory']
 // Optional tables — if missing (e.g. migration not applied), we use []
-const OPTIONAL_TABLES = ['dailyClosings']
+const OPTIONAL_TABLES = ['dailyClosings', 'senders', 'receivers']
 
 async function loadTable(client, key) {
   try {
@@ -58,6 +60,45 @@ async function loadTable(client, key) {
   } catch (err) {
     return { key, data: null, error: err }
   }
+}
+
+/**
+ * Pure merge logic — given Supabase load results and a localStorage mirror,
+ * decide what state to use for each table.
+ *
+ * Rules:
+ * - CRITICAL tables: trust Supabase always (their existence is required)
+ * - OPTIONAL tables: prefer non-empty source (Supabase first, else local mirror)
+ *   This protects against silent data loss when Supabase tables don't exist.
+ *
+ * Exported for testing.
+ */
+export function mergeLoadResults(results, localMirror = {}) {
+  const map = {}
+  const fallbackUsed = {}
+
+  for (const r of results) {
+    if (OPTIONAL_TABLES.includes(r.key)) {
+      const supabaseData = r.error ? null : (r.data || []).map((row) => row.payload)
+      const localData = Array.isArray(localMirror[r.key]) ? localMirror[r.key] : null
+
+      if (Array.isArray(supabaseData) && supabaseData.length > 0) {
+        map[r.key] = supabaseData
+      } else if (localData && localData.length > 0) {
+        map[r.key] = localData
+        fallbackUsed[r.key] = {
+          reason: r.error ? 'table-missing' : 'table-empty',
+          recoveredItems: localData.length,
+        }
+      } else {
+        map[r.key] = supabaseData || []
+      }
+    } else {
+      map[r.key] = (r.data || []).map((row) => row.payload)
+    }
+  }
+
+  return { map, fallbackUsed }
 }
 
 async function loadFromSupabase() {
@@ -71,9 +112,17 @@ async function loadFromSupabase() {
   const criticalFailure = results.find((r) => CRITICAL_TABLES.includes(r.key) && r.error)
   if (criticalFailure) throw criticalFailure.error
 
-  const map = {}
-  for (const r of results) {
-    map[r.key] = (r.data || []).map((row) => row.payload)
+  // localStorage is read as a fallback for OPTIONAL tables that may not exist
+  // in Supabase yet (e.g. user hasn't applied the migration). Without this,
+  // missing optional tables would silently wipe user data on every reload.
+  const localMirror = readLocalState() || {}
+  const { map, fallbackUsed } = mergeLoadResults(results, localMirror)
+
+  if (Object.keys(fallbackUsed).length > 0) {
+    console.warn(
+      '[persistence] Optional Supabase tables missing or empty — restored from localStorage:',
+      fallbackUsed,
+    )
   }
 
   return {
@@ -82,6 +131,8 @@ async function loadFromSupabase() {
     ledgerEntries: map.ledgerEntries,
     claimHistory: map.claimHistory,
     dailyClosings: map.dailyClosings || [],
+    senders: map.senders || [],
+    receivers: map.receivers || [],
   }
 }
 
@@ -119,11 +170,23 @@ async function saveToSupabase(state) {
   await syncTable(client, SUPABASE_TABLES.ledgerEntries, state.ledgerEntries || [])
   await syncTable(client, SUPABASE_TABLES.claimHistory, state.claimHistory || [])
 
-  // Optional: don't block save if table is missing
+  // Optional: don't block save if table is missing.
+  // localStorage mirror (always written) guarantees no data loss even
+  // if any of these fail — the user can recreate the table later.
   try {
     await syncTable(client, SUPABASE_TABLES.dailyClosings, state.dailyClosings || [])
   } catch (err) {
     console.warn('[persistence] dailyClosings sync failed (non-critical):', err?.message || err)
+  }
+  try {
+    await syncTable(client, SUPABASE_TABLES.senders, state.senders || [])
+  } catch (err) {
+    console.warn('[persistence] senders sync failed (non-critical):', err?.message || err)
+  }
+  try {
+    await syncTable(client, SUPABASE_TABLES.receivers, state.receivers || [])
+  } catch (err) {
+    console.warn('[persistence] receivers sync failed (non-critical):', err?.message || err)
   }
 }
 
@@ -145,9 +208,28 @@ export async function loadPersistedState(fallbackState, migrateState) {
 }
 
 export async function savePersistedState(state) {
-  if (getPersistenceMode() === 'supabase') {
-    await saveToSupabase(state)
-    return
+  // ALWAYS mirror to localStorage first — offline safety net
+  let localOk = true
+  let localError = null
+  try {
+    writeLocalState(state)
+  } catch (err) {
+    localOk = false
+    localError = err
+    console.warn('[persistence] local mirror failed:', err?.message || err)
   }
-  writeLocalState(state)
+
+  let supabaseOk = true
+  let supabaseError = null
+  if (getPersistenceMode() === 'supabase') {
+    try {
+      await saveToSupabase(state)
+    } catch (err) {
+      supabaseOk = false
+      supabaseError = err
+      throw err // caller retry logic still expects throw on Supabase failure
+    }
+  }
+
+  return { localOk, supabaseOk, localError, supabaseError }
 }

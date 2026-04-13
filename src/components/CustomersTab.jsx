@@ -7,15 +7,59 @@ import {
   validateTransition,
 } from '../lib/transferLogic'
 import { buildCustomerStatement } from '../lib/ledger'
+import { getCustomerTheme, getCustomerMonogram } from '../lib/customerTheme'
+import { formatEditableNumber, formatMoney, normalizeNumberInput } from '../lib/formatting'
+import { getReceiverColorClass, lookupReceiverColor } from '../lib/people'
 
-const currency = new Intl.NumberFormat('en-US', {
-  style: 'currency',
-  currency: 'USD',
-  maximumFractionDigits: 2,
-})
+function getHealthLevel(currentBalance) {
+  const v = Math.abs(Number(currentBalance) || 0)
+  if (v < 0.01) return 'clear'
+  if (v < 500) return 'caution'
+  if (v < 2000) return 'warning'
+  return 'danger'
+}
 
-function money(v) {
-  return currency.format(Number(v || 0))
+function CircularProgress({ value, size = 42 }) {
+  const radius = (size - 6) / 2
+  const circumference = 2 * Math.PI * radius
+  const clamped = Math.max(0, Math.min(100, value || 0))
+  const offset = circumference - (clamped / 100) * circumference
+  return (
+    <svg width={size} height={size} className="circular-progress" aria-hidden="true">
+      <circle
+        cx={size / 2}
+        cy={size / 2}
+        r={radius}
+        fill="none"
+        stroke="#e2e8f0"
+        strokeWidth="4"
+      />
+      <circle
+        cx={size / 2}
+        cy={size / 2}
+        r={radius}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="4"
+        strokeDasharray={circumference}
+        strokeDashoffset={offset}
+        strokeLinecap="round"
+        transform={`rotate(-90 ${size / 2} ${size / 2})`}
+        style={{ transition: 'stroke-dashoffset 0.6s ease' }}
+      />
+      <text
+        x="50%"
+        y="50%"
+        dominantBaseline="central"
+        textAnchor="middle"
+        fontSize="10"
+        fontWeight="700"
+        fill="currentColor"
+      >
+        {Math.round(clamped)}%
+      </text>
+    </svg>
+  )
 }
 
 function formatDate(v) {
@@ -119,18 +163,19 @@ export default function CustomersTab({
   onPatchTransfer,
   onFeedback,
   ledgerEntries,
+  receiverColorMap,
+  duplicateReferences,
 }) {
   const [viewMode, setViewMode] = useState(null)
   const [viewCustomerId, setViewCustomerId] = useState(null)
   const [editingCustomerId, setEditingCustomerId] = useState(null)
-  const [editDraft, setEditDraft] = useState({ name: '', openingBalance: '', settledTotal: '', openingTransferCount: '' })
+  const [editDraft, setEditDraft] = useState({ name: '', openingBalance: '', openingTransferCount: '' })
 
   function startEdit(customer) {
     setEditingCustomerId(customer.id)
     setEditDraft({
       name: customer.name || '',
       openingBalance: String(customer.openingBalance ?? ''),
-      settledTotal: String(customer.settledTotal ?? ''),
       openingTransferCount: String(customer.openingTransferCount ?? ''),
     })
   }
@@ -143,7 +188,6 @@ export default function CustomersTab({
     onUpdateCustomer(customerId, {
       name: editDraft.name,
       openingBalance: editDraft.openingBalance,
-      settledTotal: editDraft.settledTotal,
       openingTransferCount: editDraft.openingTransferCount,
     })
     setEditingCustomerId(null)
@@ -195,9 +239,10 @@ export default function CustomersTab({
           placeholder="اسم الزبون"
         />
         <input
+          className="money-input"
           inputMode="decimal"
-          value={customerDraft.openingBalance}
-          onChange={(e) => setCustomerDraft((c) => ({ ...c, openingBalance: e.target.value }))}
+          value={formatEditableNumber(customerDraft.openingBalance)}
+          onChange={(e) => setCustomerDraft((c) => ({ ...c, openingBalance: normalizeNumberInput(e.target.value) }))}
           placeholder="رصيد بداية"
         />
         <input
@@ -224,70 +269,139 @@ export default function CustomersTab({
             ? buildCustomerStatement(customers, transfers, ledgerEntries, c.id)
             : []
 
+          const healthLevel = getHealthLevel(c.currentBalance)
+          const totalTransferCount = c.transferCount || 0
+          const settledCount = c.settledCount || 0
+          const settlementPct = totalTransferCount > 0
+            ? (settledCount / totalTransferCount) * 100
+            : 0
+          const cardClasses = [
+            'customer-card-v2',
+            `health-${healthLevel}`,
+            isTransfersOpen || isStatementOpen ? 'is-expanded' : '',
+            editingCustomerId === c.id ? 'is-editing' : '',
+          ].filter(Boolean).join(' ')
+
           return (
-            <div key={c.id} className="customer-card">
-              <div className="customer-row">
-                <button className="customer-name-btn" onClick={() => openTransfers(c.id)}>
-                  {c.name}
-                  <span className="count-badge">{c.transferCount}</span>
-                  {isTransfersOpen ? ' ▲' : ' ▼'}
-                </button>
+            <div key={c.id} className={cardClasses} style={getCustomerTheme(c)}>
+              <div className="customer-stripe" aria-hidden="true" />
 
-                <div className="customer-stats">
-                  <div className="mini-stat">
-                    <span>جديدة</span>
-                    <strong>{c.receivedCount}</strong>
+              <div className="customer-header">
+                <div className="customer-avatar" aria-hidden="true">
+                  {getCustomerMonogram(c.name)}
+                </div>
+
+                <div className="customer-identity">
+                  <div className="customer-name-line">
+                    <h3 className="customer-name">{c.name}</h3>
+                    <span className={`health-badge health-badge--${healthLevel}`}>
+                      {healthLevel === 'clear' && '✓ ممتاز'}
+                      {healthLevel === 'caution' && '◯ متابعة'}
+                      {healthLevel === 'warning' && '⚠ تنبيه'}
+                      {healthLevel === 'danger' && '⚠ خطر'}
+                    </span>
                   </div>
-                  <div className="mini-stat">
-                    <span>عند الموظف</span>
-                    <strong className="text-blue">{c.withEmployeeCount}</strong>
+                  <div className="customer-sub">
+                    <span className="customer-transfer-count">
+                      {totalTransferCount} حوالة
+                    </span>
+                    {c.openingOutstandingTransferCount > 0 ? (
+                      <span className="customer-opening-badge">
+                        افتتاحي: {c.openingOutstandingTransferCount}
+                      </span>
+                    ) : null}
                   </div>
-                  <div className="mini-stat">
-                    <span>مراجعة لاحقة</span>
-                    <strong className="text-orange">{c.reviewHoldCount}</strong>
-                  </div>
-                  <div className="mini-stat">
-                    <span>مشاكل</span>
-                    <strong className="text-red">{c.issueCount}</strong>
-                  </div>
-                  <div className="mini-stat">
-                    <span>تم السحب</span>
-                    <strong className="text-green">{c.pickedUpCount}</strong>
-                  </div>
-                  <div className="mini-stat">
+                </div>
+
+                <div className="customer-balance-block">
+                  <div className="customer-balance-row">
                     <span>الرصيد الجاري</span>
-                    <strong className="balance-cell">{money(c.currentBalance)}</strong>
+                    <strong className={`balance-value balance-${healthLevel}`}>
+                      {formatMoney(c.currentBalance)}
+                    </strong>
                   </div>
-                  <div className="mini-stat">
-                    <span>افتتاحي</span>
-                    <strong>{c.openingOutstandingTransferCount}</strong>
-                  </div>
-                  <div className="mini-stat">
+                  <div className="customer-balance-row customer-balance-row--sub">
                     <span>غير مدفوع</span>
-                    <strong className="text-orange">{money(c.unsettledAmount)}</strong>
+                    <strong className="text-orange">{formatMoney(c.unsettledAmount)}</strong>
                   </div>
                 </div>
 
-                <div className="customer-actions">
+                <div className="customer-progress">
+                  <CircularProgress value={settlementPct} size={56} />
+                  <span className="customer-progress-label">
+                    {settledCount} / {totalTransferCount}
+                  </span>
+                </div>
+
+                <div className="customer-actions-v2">
                   <button
-                    className={`action-btn ${isStatementOpen ? 'action-btn--active' : 'action-btn--blue'}`}
+                    className={`customer-btn ${isTransfersOpen ? 'customer-btn--active' : ''}`}
+                    onClick={() => openTransfers(c.id)}
+                    title="عرض الحوالات"
+                  >
+                    <span className="customer-btn-icon">📋</span>
+                    <span>حوالات</span>
+                  </button>
+                  <button
+                    className={`customer-btn ${isStatementOpen ? 'customer-btn--active' : ''}`}
                     onClick={() => openStatement(c.id)}
+                    title="عرض كشف الحساب"
                   >
-                    {isStatementOpen ? 'إخفاء الكشف' : 'كشف'}
+                    <span className="customer-btn-icon">📊</span>
+                    <span>كشف</span>
                   </button>
                   <button
-                    className="action-btn ghost-button"
+                    className="customer-btn"
                     onClick={() => startEdit(c)}
+                    title="تعديل"
                   >
-                    تعديل
+                    <span className="customer-btn-icon">✏</span>
+                    <span>تعديل</span>
                   </button>
                   <button
-                    className="action-btn action-btn--red"
+                    className="customer-btn customer-btn--danger"
                     onClick={() => onDeleteCustomer(c.id)}
+                    title="حذف"
                   >
-                    حذف
+                    <span className="customer-btn-icon">🗑</span>
                   </button>
                 </div>
+              </div>
+
+              <div className="customer-chips">
+                {c.receivedCount > 0 ? (
+                  <span className="stat-chip stat-chip--neutral">
+                    <span className="stat-chip-value">{c.receivedCount}</span>
+                    <span className="stat-chip-label">جديدة</span>
+                  </span>
+                ) : null}
+                {c.withEmployeeCount > 0 ? (
+                  <span className="stat-chip stat-chip--blue">
+                    <span className="stat-chip-value">{c.withEmployeeCount}</span>
+                    <span className="stat-chip-label">عند الموظف</span>
+                  </span>
+                ) : null}
+                {c.reviewHoldCount > 0 ? (
+                  <span className="stat-chip stat-chip--amber">
+                    <span className="stat-chip-value">{c.reviewHoldCount}</span>
+                    <span className="stat-chip-label">مراجعة</span>
+                  </span>
+                ) : null}
+                {c.issueCount > 0 ? (
+                  <span className="stat-chip stat-chip--red">
+                    <span className="stat-chip-value">{c.issueCount}</span>
+                    <span className="stat-chip-label">مشاكل</span>
+                  </span>
+                ) : null}
+                {c.pickedUpCount > 0 ? (
+                  <span className="stat-chip stat-chip--green">
+                    <span className="stat-chip-value">{c.pickedUpCount}</span>
+                    <span className="stat-chip-label">تم السحب</span>
+                  </span>
+                ) : null}
+                {totalTransferCount === 0 ? (
+                  <span className="stat-chip stat-chip--muted">لا حوالات بعد</span>
+                ) : null}
               </div>
 
               {editingCustomerId === c.id ? (
@@ -299,9 +413,10 @@ export default function CustomersTab({
                       placeholder="اسم الزبون"
                     />
                     <input
+                      className="money-input"
                       inputMode="decimal"
-                      value={editDraft.openingBalance}
-                      onChange={(e) => setEditDraft((d) => ({ ...d, openingBalance: e.target.value }))}
+                      value={formatEditableNumber(editDraft.openingBalance)}
+                      onChange={(e) => setEditDraft((d) => ({ ...d, openingBalance: normalizeNumberInput(e.target.value) }))}
                       placeholder="رصيد افتتاحي"
                     />
                     <input
@@ -309,12 +424,6 @@ export default function CustomersTab({
                       value={editDraft.openingTransferCount}
                       onChange={(e) => setEditDraft((d) => ({ ...d, openingTransferCount: e.target.value }))}
                       placeholder="عدد حوالات البداية"
-                    />
-                    <input
-                      inputMode="decimal"
-                      value={editDraft.settledTotal}
-                      onChange={(e) => setEditDraft((d) => ({ ...d, settledTotal: e.target.value }))}
-                      placeholder="مُسوّى سابقاً"
                     />
                     <button className="action-btn action-btn--green" onClick={() => saveEdit(c.id)}>حفظ</button>
                     <button className="ghost-button" onClick={cancelEdit}>إلغاء</button>
@@ -336,6 +445,7 @@ export default function CustomersTab({
                           <tr>
                             <th>الرقم</th>
                             <th>المرسل</th>
+                            <th>المستلم</th>
                             <th>التاريخ</th>
                             <th>الحالة</th>
                             <th>الإجراء</th>
@@ -347,18 +457,30 @@ export default function CustomersTab({
                           </tr>
                         </thead>
                         <tbody>
-                          {customerTransfers.map((t) => (
-                            <tr
-                              key={t.id}
-                              className={
-                                t.status === 'issue' ? 'row-issue'
-                                  : t.settled ? 'row-settled'
-                                  : t.status === 'picked_up' ? 'row-picked'
-                                  : ''
-                              }
-                            >
+                          {customerTransfers.map((t) => {
+                            const refKey = String(t.reference || '').trim().toUpperCase()
+                            const isDupRef = duplicateReferences && refKey && duplicateReferences.has(refKey)
+                            const receiverPreview = lookupReceiverColor(receiverColorMap, t.receiverName)
+                            const receiverClass = getReceiverColorClass(receiverPreview.colorLevel)
+                            const rowClass = [
+                              isDupRef ? 'row-duplicate-ref' : '',
+                              t.status === 'issue' ? 'row-issue'
+                                : t.settled ? 'row-settled'
+                                : t.status === 'picked_up' ? 'row-picked'
+                                : '',
+                            ].filter(Boolean).join(' ')
+                            return (
+                            <tr key={t.id} className={rowClass}>
                               <td className="ref-cell">{t.reference}</td>
                               <td>{t.senderName}</td>
+                              <td className={receiverClass}>
+                                <span
+                                  className="receiver-cell-content"
+                                  title={receiverPreview.total > 0 ? `قديم ${receiverPreview.legacyCount} + نظام ${receiverPreview.systemCount} = ${receiverPreview.total}` : undefined}
+                                >
+                                  {t.receiverName || '-'}
+                                </span>
+                              </td>
                               <td className="date-cell">{formatDate(t.createdAt)}</td>
                               <td>
                                 <span
@@ -373,29 +495,29 @@ export default function CustomersTab({
                                 <StatusActions item={t} onTransition={safeTransition} />
                               </td>
                               <td className="amount-info">
-                                {t.transferAmount === null ? '-' : money(t.transferAmount)}
+                                {t.transferAmount === null ? '-' : formatMoney(t.transferAmount)}
                               </td>
                               <td>
                                 <input
-                                  className="table-input table-input--sm"
+                                  className="table-input table-input--sm money-input"
                                   inputMode="decimal"
-                                  value={t.customerAmount ?? ''}
+                                  value={formatEditableNumber(t.customerAmount ?? '')}
                                   onChange={(e) =>
-                                    onPatchTransfer(t.id, (r) => updateAmount(r, 'customerAmount', e.target.value))
+                                    onPatchTransfer(t.id, (r) => updateAmount(r, 'customerAmount', normalizeNumberInput(e.target.value)))
                                   }
                                 />
                               </td>
                               <td>
                                 <input
-                                  className="table-input table-input--sm"
+                                  className="table-input table-input--sm money-input"
                                   inputMode="decimal"
-                                  value={t.systemAmount ?? ''}
+                                  value={formatEditableNumber(t.systemAmount ?? '')}
                                   onChange={(e) =>
-                                    onPatchTransfer(t.id, (r) => updateAmount(r, 'systemAmount', e.target.value))
+                                    onPatchTransfer(t.id, (r) => updateAmount(r, 'systemAmount', normalizeNumberInput(e.target.value)))
                                   }
                                 />
                               </td>
-                              <td>{t.margin === null ? '-' : money(t.margin)}</td>
+                              <td>{t.margin === null ? '-' : formatMoney(t.margin)}</td>
                               <td>
                                 <input
                                   className="table-input table-input--sm"
@@ -406,7 +528,8 @@ export default function CustomersTab({
                                 />
                               </td>
                             </tr>
-                          ))}
+                            )
+                          })}
                         </tbody>
                       </table>
                     </div>
@@ -444,9 +567,9 @@ export default function CustomersTab({
                               <td>{entry.label}</td>
                               <td className="ref-cell">{entry.reference}</td>
                               <td>{entry.senderName}</td>
-                              <td>{entry.amount > 0 ? money(entry.amount) : '-'}</td>
-                              <td>{entry.amount < 0 ? money(Math.abs(entry.amount)) : '-'}</td>
-                              <td className="balance-cell">{money(entry.runningBalance)}</td>
+                              <td>{entry.amount > 0 ? formatMoney(entry.amount) : '-'}</td>
+                              <td>{entry.amount < 0 ? formatMoney(Math.abs(entry.amount)) : '-'}</td>
+                              <td className="balance-cell">{formatMoney(entry.runningBalance)}</td>
                               <td>{entry.note || '-'}</td>
                             </tr>
                           ))}

@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest'
 import {
   buildCustomerFromDraft,
   buildTransferFromDraft,
+  createEmptyTransferBatchDraft,
+  createEmptyTransferBatchRow,
+  buildTransfersFromBatchDraft,
   computeMargin,
   parseMoney,
   filterTransfers,
@@ -21,6 +24,8 @@ import {
   buildCustomerStatement,
   buildLegacySettlementEntry,
   buildOpeningBalanceEntry,
+  createLegacySettlementAdjustmentEntry,
+  createOpeningBalanceAdjustmentEntry,
   createOpeningSettlementEntry,
   buildSeedLedgerEntries,
   buildTransferLedgerEntries,
@@ -119,41 +124,143 @@ describe('بناء الزبائن والحوالات', () => {
 
   it('يرفض حوالة بدون زبون', () => {
     expect(buildTransferFromDraft(
-      { customerId: '', senderName: 'أحمد', reference: 'X-1', transferAmount: '', customerAmount: '' },
+      { customerId: '', senderName: 'أحمد', receiverName: 'محمد', reference: 'X-1', transferAmount: '', customerAmount: '' },
       [], customers,
     ).ok).toBe(false)
   })
 
   it('يرفض حوالة بدون مرسل', () => {
     const r = buildTransferFromDraft(
-      { customerId: '201', senderName: '', reference: 'X-1', transferAmount: '', customerAmount: '' },
+      { customerId: '201', senderName: '', receiverName: 'محمد', reference: 'X-1', transferAmount: '', customerAmount: '' },
       [], customers,
     )
     expect(r.ok).toBe(false)
     expect(r.error).toContain('المرسل')
   })
 
-  it('يرفض رقم حوالة مكرر', () => {
+  it('يرفض حوالة بدون مستلم', () => {
+    const r = buildTransferFromDraft(
+      { customerId: '201', senderName: 'أحمد', receiverName: '', reference: 'X-1', transferAmount: '', customerAmount: '' },
+      [], customers,
+    )
+    expect(r.ok).toBe(false)
+    expect(r.error).toContain('المستلم')
+  })
+
+  it('يقبل رقم حوالة مكرر مع علامة isDuplicate', () => {
     const existing = [makeTx({ id: 1, reference: 'WU-100', customerId: 201, senderName: 'أحمد', receiverName: 'عمر', status: 'received', createdAt: '2026-04-12T08:00:00.000Z', updatedAt: '2026-04-12T08:00:00.000Z' })]
-    expect(buildTransferFromDraft(
-      { customerId: '201', senderName: 'سالم', reference: 'wu-100', transferAmount: '', customerAmount: '' },
+    const r = buildTransferFromDraft(
+      { customerId: '201', senderName: 'سالم', receiverName: 'محمد', reference: 'wu-100', transferAmount: '', customerAmount: '' },
       existing, customers,
-    ).ok).toBe(false)
+    )
+    expect(r.ok).toBe(true)
+    expect(r.isDuplicate).toBe(true)
+    expect(r.value.reference).toBe('WU-100')
+  })
+
+  it('يُعلّم حوالة غير مكرّرة بأن isDuplicate=false', () => {
+    const r = buildTransferFromDraft(
+      { customerId: '201', senderName: 'أحمد', receiverName: 'محمد', reference: 'WU-NEW', transferAmount: '', customerAmount: '' },
+      [], customers,
+    )
+    expect(r.ok).toBe(true)
+    expect(r.isDuplicate).toBe(false)
   })
 
   it('ينشئ حوالة بحالة received مع المبالغ', () => {
     const r = buildTransferFromDraft(
-      { customerId: '201', senderName: 'أحمد', reference: ' wu-999 ', transferAmount: '500', customerAmount: '480' },
+      { customerId: '201', senderName: 'أحمد', receiverName: 'محمد علي', reference: ' wu-999 ', transferAmount: '500', customerAmount: '480' },
       [], customers,
     )
     expect(r.ok).toBe(true)
     expect(r.value.status).toBe('received')
     expect(r.value.reference).toBe('WU-999')
-    expect(r.value.receiverName).toBe('عمر')
+    expect(r.value.receiverName).toBe('محمد علي')
     expect(r.value.transferAmount).toBe(500)
     expect(r.value.customerAmount).toBe(480)
     expect(r.value.systemAmount).toBeNull()
     expect(r.value.settled).toBe(false)
+  })
+
+  it('ينشئ عدة حوالات لنفس الزبون من دفعة واحدة', () => {
+    const r = buildTransfersFromBatchDraft(
+      {
+        customerId: '201',
+        rows: [
+          { senderName: 'أحمد', receiverName: 'محمد', reference: 'WU-2001', transferAmount: '500', customerAmount: '480' },
+          { senderName: 'سالم', receiverName: 'يوسف', reference: 'WU-2002', transferAmount: '300', customerAmount: '290' },
+          { senderName: 'ناصر', receiverName: 'إبراهيم', reference: 'WU-2003', transferAmount: '', customerAmount: '' },
+        ],
+      },
+      [],
+      customers,
+    )
+
+    expect(r.ok).toBe(true)
+    expect(r.value).toHaveLength(3)
+    expect(r.value[0].customerId).toBe(201)
+    expect(r.value[1].reference).toBe('WU-2002')
+    expect(r.value[2].transferAmount).toBeNull()
+    expect(r.value[2].customerAmount).toBeNull()
+  })
+
+  it('يقبل التكرار داخل نفس الدفعة ويعدّه', () => {
+    const r = buildTransfersFromBatchDraft(
+      {
+        customerId: '201',
+        rows: [
+          { senderName: 'أحمد', receiverName: 'محمد', reference: 'WU-3001', transferAmount: '500', customerAmount: '480' },
+          { senderName: 'سالم', receiverName: 'يوسف', reference: 'wu-3001', transferAmount: '300', customerAmount: '290' },
+        ],
+      },
+      [],
+      customers,
+    )
+
+    expect(r.ok).toBe(true)
+    expect(r.value).toHaveLength(2)
+    expect(r.value[0].reference).toBe('WU-3001')
+    expect(r.value[1].reference).toBe('WU-3001')
+    expect(r.duplicatesCount).toBe(2)
+  })
+
+  it('يرفض سطر دفعة ناقص البيانات المطلوبة', () => {
+    const r = buildTransfersFromBatchDraft(
+      {
+        customerId: '201',
+        rows: [{ senderName: 'أحمد', receiverName: 'محمد', reference: '', transferAmount: '', customerAmount: '' }],
+      },
+      [],
+      customers,
+    )
+
+    expect(r.ok).toBe(false)
+    expect(r.error).toContain('السطر 1')
+    expect(r.error).toContain('اسم المرسل واسم المستلم ورقم الحوالة')
+  })
+
+  it('يتجاهل الصفوف الفارغة في دفعة الحوالات', () => {
+    const r = buildTransfersFromBatchDraft(
+      {
+        customerId: '201',
+        rows: [
+          createEmptyTransferBatchRow(),
+          { senderName: 'أحمد', receiverName: 'محمد', reference: 'WU-4001', transferAmount: '', customerAmount: '' },
+          createEmptyTransferBatchRow(),
+        ],
+      },
+      [],
+      customers,
+    )
+
+    expect(r.ok).toBe(true)
+    expect(r.value).toHaveLength(1)
+  })
+
+  it('ينشئ مسودة دفعة جاهزة بعدة صفوف فارغة', () => {
+    const draft = createEmptyTransferBatchDraft()
+    expect(draft.customerId).toBe('')
+    expect(draft.rows).toHaveLength(4)
   })
 })
 
@@ -426,6 +533,19 @@ describe('دفتر الحسابات', () => {
     expect(claim.customerId).toBe(0)
     expect(claim.type).toBe('profit_claim')
   })
+
+  it('createOpeningBalanceAdjustmentEntry ينشئ تعديلًا محاسبيًا مع فرق العدد', () => {
+    const entry = createOpeningBalanceAdjustmentEntry(201, 150, 2)
+    expect(entry.type).toBe('opening_balance_adjustment')
+    expect(entry.amount).toBe(150)
+    expect(entry.transferCount).toBe(2)
+  })
+
+  it('createLegacySettlementAdjustmentEntry ينشئ تعديلًا على التسوية السابقة', () => {
+    const entry = createLegacySettlementAdjustmentEntry(201, 50)
+    expect(entry.type).toBe('legacy_settlement_adjustment')
+    expect(entry.amount).toBe(-50)
+  })
 })
 
 /* ══════════════════════════════════════════════════════
@@ -464,6 +584,13 @@ describe('الملخصات والربط بين الأقسام', () => {
     expect(s.totalMargin).toBe(20 + 10 + 15)          // 45
     expect(s.accountantPending).toBe(680 + 435)        // 1115 (unsettled system)
     expect(s.customerOwed).toBe(660 + 420)             // 1080 (unsettled customer)
+  })
+
+  it('ملخص الحوالات مع الرصيد الافتتاحي يطابق قسم التسويات', () => {
+    const s = summarizeTransfers(txs, seeds, customers)
+    expect(s.unsettledCount).toBe(6) // 4 افتتاحي + 2 حوالات غير مسواة
+    expect(s.accountantPending).toBe(800 + 680 + 435)
+    expect(s.customerOwed).toBe(800 + 660 + 420)
   })
 
   it('ملخص الزبائن — عمر', () => {
@@ -505,15 +632,14 @@ describe('الملخصات والربط بين الأقسام', () => {
     expect(office.accountantRealizedMargin).toBe(10)             // from T-404 only
     expect(office.accountantClaimableProfit).toBe(10)
     expect(office.accountantPendingProfit).toBe(35)
-    // cashOnHand = 2405 - 480 - 1880 - 0 = 45
-    expect(office.accountantCashOnHand).toBe(45)
+    // cashOnHand (كاش فعلي بيد المحاسب) = 2405 - 480 - 0 = 1925
+    expect(office.accountantCashOnHand).toBe(1925)
   })
 
-  it('المعادلة الحسابية: مدفوع + مستحق + مطالبات + كاش = المستلم', () => {
+  it('المعادلة الحسابية: مدفوع + مطالبات + كاش فعلي = المستلم', () => {
     const office = summarizeOfficeLedger(customers, txs, seeds)
     expect(
       office.accountantCustomerPaid +
-      office.accountantOutstandingCustomer +
       office.accountantClaimedProfit +
       office.accountantCashOnHand
     ).toBe(office.accountantSystemReceived)
@@ -524,11 +650,10 @@ describe('الملخصات والربط بين الأقسام', () => {
     const office = summarizeOfficeLedger(customers, txs, [...seeds, claim])
     expect(office.accountantClaimedProfit).toBe(10)
     expect(office.accountantClaimableProfit).toBe(0)
-    expect(office.accountantCashOnHand).toBe(35)  // 45 - 10
+    expect(office.accountantCashOnHand).toBe(1915)  // 1925 - 10
 
     expect(
       office.accountantCustomerPaid +
-      office.accountantOutstandingCustomer +
       office.accountantClaimedProfit +
       office.accountantCashOnHand
     ).toBe(office.accountantSystemReceived)
@@ -541,11 +666,11 @@ describe('الملخصات والربط بين الأقسام', () => {
     expect(office.accountantCustomerPaid).toBe(200 + 280 + 660 + 420)  // 1560
     expect(office.accountantRealizedMargin).toBe(45)
     expect(office.accountantClaimableProfit).toBe(45)
-    expect(office.accountantCashOnHand).toBe(45)
+    // cashOnHand = 2405 - 1560 - 0 = 845 (كاش فعلي يشمل 800 مستحق + 45 ربح)
+    expect(office.accountantCashOnHand).toBe(845)
 
     expect(
       office.accountantCustomerPaid +
-      office.accountantOutstandingCustomer +
       office.accountantClaimedProfit +
       office.accountantCashOnHand
     ).toBe(office.accountantSystemReceived)
@@ -582,6 +707,41 @@ describe('الملخصات والربط بين الأقسام', () => {
     expect(omarSummary.openingOutstandingTransferCount).toBe(0)
     expect(omarSummary.unsettledAmount).toBe(660)
     expect(omarSummary.unsettledCount).toBe(1)
+  })
+
+  it('تعديل الرصيد الافتتاحي يضيف حركة جديدة بدل إعادة كتابة التاريخ', () => {
+    const adjustment = createOpeningBalanceAdjustmentEntry(201, 200, 1)
+    const office = summarizeOfficeLedger(customers, txs, [...seeds, adjustment])
+    const statement = buildCustomerStatement(customers, txs, [...seeds, adjustment], 201)
+    const omarSummary = summarizeCustomers(customers, txs, [...seeds, adjustment]).find((c) => c.id === 201)
+
+    expect(statement.some((entry) => entry.type === 'opening_balance')).toBe(true)
+    expect(statement.some((entry) => entry.type === 'opening_balance_adjustment')).toBe(true)
+    expect(omarSummary.openingOutstandingAmount).toBe(1000)
+    expect(omarSummary.openingOutstandingTransferCount).toBe(5)
+    expect(office.accountantSystemReceived).toBe(2605)
+  })
+
+  it('تعديل التسوية السابقة يغيّر المدفوع للمحاسب بدون مسح القيد الأصلي', () => {
+    const adjustment = createLegacySettlementAdjustmentEntry(201, 50)
+    const office = summarizeOfficeLedger(customers, txs, [...seeds, adjustment])
+    const statement = buildCustomerStatement(customers, txs, [...seeds, adjustment], 201)
+
+    expect(statement.some((entry) => entry.type === 'legacy_settlement')).toBe(true)
+    expect(statement.some((entry) => entry.type === 'legacy_settlement_adjustment')).toBe(true)
+    expect(office.accountantCustomerPaid).toBe(530)
+  })
+
+  it('ملخص المكتب يتجاهل قيود الزبون المحذوف من حساب المحاسب', () => {
+    const activeCustomers = customers.filter((customer) => customer.id !== 201)
+    const activeTransfers = txs.filter((transfer) => transfer.customerId !== 201)
+    const office = summarizeOfficeLedger(activeCustomers, activeTransfers, seeds)
+
+    expect(office.officeCustomerLiability).toBe(420)
+    expect(office.accountantSystemReceived).toBe(435)
+    expect(office.accountantCustomerPaid).toBe(0)
+    expect(office.accountantOutstandingCustomer).toBe(420)
+    expect(office.accountantCashOnHand).toBe(435)
   })
 })
 

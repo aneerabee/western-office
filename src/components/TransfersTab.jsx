@@ -1,23 +1,23 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { statusMeta } from '../sampleData'
 import {
   FILTER_ALL,
+  createEmptyTransferBatchRow,
   statusOrder,
   transitionTransfer,
   validateTransition,
   updateAmount,
   updateTransferField,
 } from '../lib/transferLogic'
-
-const currency = new Intl.NumberFormat('en-US', {
-  style: 'currency',
-  currency: 'USD',
-  maximumFractionDigits: 2,
-})
-
-function money(v) {
-  return currency.format(Number(v || 0))
-}
+import {
+  PERSON_KIND,
+  collectNameSuggestions,
+  getReceiverColorClass,
+  lookupReceiverColor,
+  referenceExists,
+} from '../lib/people'
+import { formatEditableNumber, formatMoney, normalizeNumberInput } from '../lib/formatting'
+import CustomerBadge from './CustomerBadge'
 
 function formatDate(v) {
   if (!v) return '-'
@@ -36,6 +36,77 @@ const VIEW_LABELS = {
   completed: 'مكتملة فقط',
 }
 
+const STATUS_ICONS = {
+  received: '●',
+  with_employee: '➤',
+  review_hold: '⏸',
+  picked_up: '✓',
+  issue: '⚠',
+}
+
+function CustomerPicker({ customers, value, onChange, placeholder }) {
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
+  const selected = customers.find((customer) => String(customer.id) === String(value))
+
+  const visibleCustomers = customers
+    .filter((customer) => customer.name.toLowerCase().includes(query.trim().toLowerCase()))
+    .sort((a, b) => a.name.localeCompare(b.name, 'ar'))
+
+  function pickCustomer(customerId) {
+    onChange(String(customerId))
+    setQuery('')
+    setOpen(false)
+  }
+
+  return (
+    <div className={`customer-picker${open ? ' customer-picker--open' : ''}`}>
+      <button
+        type="button"
+        className={`customer-picker-trigger ${selected ? 'customer-picker-trigger--selected' : ''}`}
+        onClick={() => setOpen((state) => !state)}
+      >
+        <span className="customer-picker-label">{selected?.name || placeholder}</span>
+        <span className="customer-picker-caret">{open ? '▲' : '▼'}</span>
+      </button>
+
+      {open ? (
+        <div className="customer-picker-popover">
+          <input
+            className="customer-picker-search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="بحث عن الزبون"
+            autoFocus
+          />
+          <div className="customer-picker-list">
+            <button
+              type="button"
+              className={`customer-picker-item ${!value ? 'customer-picker-item--active' : ''}`}
+              onClick={() => pickCustomer('')}
+            >
+              {placeholder}
+            </button>
+            {visibleCustomers.map((customer) => (
+              <button
+                key={customer.id}
+                type="button"
+                className={`customer-picker-item ${String(customer.id) === String(value) ? 'customer-picker-item--active' : ''}`}
+                onClick={() => pickCustomer(customer.id)}
+              >
+                {customer.name}
+              </button>
+            ))}
+            {visibleCustomers.length === 0 ? (
+              <div className="customer-picker-empty">لا توجد نتائج</div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 export default function TransfersTab({
   filteredTransfers,
   allTransfers,
@@ -43,7 +114,10 @@ export default function TransfersTab({
   customersById,
   transferDraft,
   setTransferDraft,
+  batchTransferDraft,
+  setBatchTransferDraft,
   onAddTransfer,
+  onAddTransferBatch,
   onPatchTransfer,
   onDeleteTransfer,
   searchTerm,
@@ -63,9 +137,37 @@ export default function TransfersTab({
   onResetFilters,
   transferSummary,
   onFeedback,
+  receiverColorMap,
+  duplicateReferences,
+  senders,
+  receivers,
+  readOnly = false,
+  hideProfit = false,
 }) {
   const [editingId, setEditingId] = useState(null)
   const [settledOpen, setSettledOpen] = useState(false)
+  const [entryMode, setEntryMode] = useState('single')
+  const [pickupFlowId, setPickupFlowId] = useState(null)
+
+  const senderSuggestions = useMemo(
+    () => collectNameSuggestions(allTransfers, senders || [], PERSON_KIND.SENDER),
+    [allTransfers, senders],
+  )
+  const receiverSuggestions = useMemo(
+    () => collectNameSuggestions(allTransfers, receivers || [], PERSON_KIND.RECEIVER),
+    [allTransfers, receivers],
+  )
+
+  // Live single-form warnings for duplicate reference and receiver color
+  const singleRefDuplicate = useMemo(
+    () => (transferDraft.reference || '').trim() !== '' && referenceExists(allTransfers, transferDraft.reference),
+    [allTransfers, transferDraft.reference],
+  )
+  const singleReceiverPreview = useMemo(
+    () => lookupReceiverColor(receiverColorMap, transferDraft.receiverName),
+    [receiverColorMap, transferDraft.receiverName],
+  )
+  const singleReceiverPreviewClass = getReceiverColorClass(singleReceiverPreview.colorLevel)
 
   // Settled transfers for the separate section
   const settledTransfers = allTransfers
@@ -81,58 +183,235 @@ export default function TransfersTab({
     }
     const check = validateTransition(item, nextStatus)
     if (!check.ok) {
+      if (nextStatus === 'picked_up') {
+        setEditingId(item.id)
+        setPickupFlowId(item.id)
+        onFeedback(`${check.error} ثم اضغط حفظ السحب.`)
+        return
+      }
       onFeedback(check.error)
       setEditingId(item.id)
       return
     }
+    setPickupFlowId(null)
     onPatchTransfer(item.id, (r) => transitionTransfer(r, nextStatus))
+  }
+
+  function updateBatchRow(rowId, field, value) {
+    setBatchTransferDraft((draft) => ({
+      ...draft,
+      rows: draft.rows.map((row) => (row.id === rowId ? { ...row, [field]: value } : row)),
+    }))
+  }
+
+  function addBatchRow() {
+    setBatchTransferDraft((draft) => ({
+      ...draft,
+      rows: [...draft.rows, createEmptyTransferBatchRow()],
+    }))
+  }
+
+  function removeBatchRow(rowId) {
+    setBatchTransferDraft((draft) => {
+      const nextRows = draft.rows.filter((row) => row.id !== rowId)
+      return {
+        ...draft,
+        rows: nextRows.length > 0 ? nextRows : [createEmptyTransferBatchRow()],
+      }
+    })
   }
 
   return (
     <>
-      {/* ── Add transfer ── */}
-      <section className="panel">
-        <div className="panel-head compact">
-          <h2>إضافة حوالة</h2>
-        </div>
+      {/* Autocomplete sources — always mounted so they work in single/batch/edit modes */}
+      <datalist id="sender-name-suggestions">
+        {senderSuggestions.map((name) => (
+          <option key={name} value={name} />
+        ))}
+      </datalist>
+      <datalist id="receiver-name-suggestions">
+        {receiverSuggestions.map((name) => (
+          <option key={name} value={name} />
+        ))}
+      </datalist>
 
-        <form className="inline-form" onSubmit={onAddTransfer}>
-          <select
-            value={transferDraft.customerId}
-            onChange={(e) => setTransferDraft((c) => ({ ...c, customerId: e.target.value }))}
-          >
-            <option value="">اختر الزبون</option>
-            {customers
-              .slice()
-              .sort((a, b) => a.name.localeCompare(b.name, 'ar'))
-              .map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-          </select>
-          <input
-            value={transferDraft.senderName}
-            onChange={(e) => setTransferDraft((c) => ({ ...c, senderName: e.target.value }))}
-            placeholder="اسم المرسل"
-          />
-          <input
-            value={transferDraft.reference}
-            onChange={(e) => setTransferDraft((c) => ({ ...c, reference: e.target.value }))}
-            placeholder="رقم الحوالة"
-          />
-          <input
-            inputMode="decimal"
-            value={transferDraft.transferAmount}
-            onChange={(e) => setTransferDraft((c) => ({ ...c, transferAmount: e.target.value }))}
-            placeholder="مبلغ الحوالة"
-          />
-          <input
-            inputMode="decimal"
-            value={transferDraft.customerAmount}
-            onChange={(e) => setTransferDraft((c) => ({ ...c, customerAmount: e.target.value }))}
-            placeholder="كم بنعطوه"
-          />
-          <button type="submit">إضافة حوالة</button>
-        </form>
+      {/* ── Add transfer (hidden in read-only mode) ── */}
+      <section className="panel">
+        {readOnly ? null : (
+          <>
+            <div className="panel-head compact">
+              <h2>إضافة حوالة</h2>
+            </div>
+
+            <div className="entry-mode-toggle">
+              <button
+                type="button"
+                className={entryMode === 'single' ? 'entry-mode-btn entry-mode-btn--active' : 'entry-mode-btn'}
+                onClick={() => setEntryMode('single')}
+              >
+                حوالة واحدة
+              </button>
+              <button
+                type="button"
+                className={entryMode === 'batch' ? 'entry-mode-btn entry-mode-btn--active' : 'entry-mode-btn'}
+                onClick={() => setEntryMode('batch')}
+              >
+                عدة حوالات لنفس الزبون
+              </button>
+            </div>
+
+        {entryMode === 'single' ? (
+          <>
+            <form className="inline-form" onSubmit={onAddTransfer}>
+              <CustomerPicker
+                customers={customers}
+                value={transferDraft.customerId}
+                onChange={(customerId) => setTransferDraft((c) => ({ ...c, customerId }))}
+                placeholder="اختر الزبون"
+              />
+              <input
+                list="sender-name-suggestions"
+                value={transferDraft.senderName}
+                onChange={(e) => setTransferDraft((c) => ({ ...c, senderName: e.target.value }))}
+                placeholder="اسم المرسل"
+              />
+              <input
+                list="receiver-name-suggestions"
+                className={singleReceiverPreviewClass ? `input-${singleReceiverPreviewClass}` : ''}
+                value={transferDraft.receiverName}
+                onChange={(e) => setTransferDraft((c) => ({ ...c, receiverName: e.target.value }))}
+                placeholder="اسم المستلم"
+              />
+              <input
+                className={singleRefDuplicate ? 'input-duplicate-ref' : ''}
+                value={transferDraft.reference}
+                onChange={(e) => setTransferDraft((c) => ({ ...c, reference: e.target.value.toUpperCase() }))}
+                placeholder="رقم الحوالة"
+              />
+              <input
+                className="money-input"
+                inputMode="decimal"
+                value={formatEditableNumber(transferDraft.transferAmount)}
+                onChange={(e) => setTransferDraft((c) => ({ ...c, transferAmount: normalizeNumberInput(e.target.value) }))}
+                placeholder="مبلغ الحوالة"
+              />
+              <input
+                className="money-input"
+                inputMode="decimal"
+                value={formatEditableNumber(transferDraft.customerAmount)}
+                onChange={(e) => setTransferDraft((c) => ({ ...c, customerAmount: normalizeNumberInput(e.target.value) }))}
+                placeholder="كم بنعطوه"
+              />
+              <button type="submit" className={singleRefDuplicate ? 'btn-dup-accept' : ''}>
+                {singleRefDuplicate ? '⚠ إضافة حوالة مكرّرة' : 'إضافة حوالة'}
+              </button>
+            </form>
+
+            {singleRefDuplicate ? (
+              <div className="duplicate-ref-banner">
+                ⚠ رقم الحوالة <strong>{transferDraft.reference}</strong> موجود مسبقاً — ستُضاف كحوالة مكرّرة ومُميَّزة بالأحمر لحين المراجعة
+              </div>
+            ) : null}
+
+            {transferDraft.receiverName && singleReceiverPreview.total > 0 ? (
+              <div className={`receiver-preview-badge ${singleReceiverPreviewClass}`}>
+                المستلم <strong>{transferDraft.receiverName}</strong> — قديم: {singleReceiverPreview.legacyCount || 0} · النظام: {singleReceiverPreview.systemCount || 0} · المجموع: <strong>{singleReceiverPreview.total}</strong>
+              </div>
+            ) : null}
+          </>
+        ) : (
+          <form className="batch-transfer-form" onSubmit={onAddTransferBatch}>
+            <div className="batch-transfer-head">
+              <CustomerPicker
+                customers={customers}
+                value={batchTransferDraft.customerId}
+                onChange={(customerId) => setBatchTransferDraft((c) => ({ ...c, customerId }))}
+                placeholder="اختر الزبون"
+              />
+              <div className="batch-transfer-actions">
+                <button
+                  type="button"
+                  className="ghost-button ghost-button--muted"
+                  onClick={addBatchRow}
+                >
+                  إضافة سطر
+                </button>
+                <button type="submit">حفظ الدفعة</button>
+              </div>
+            </div>
+
+            <div className="batch-grid">
+              <div className="batch-grid-head">#</div>
+              <div className="batch-grid-head">اسم المرسل</div>
+              <div className="batch-grid-head">اسم المستلم</div>
+              <div className="batch-grid-head">رقم الحوالة</div>
+              <div className="batch-grid-head">مبلغ الحوالة</div>
+              <div className="batch-grid-head">كم بنعطوه</div>
+              <div className="batch-grid-head">حذف</div>
+
+              {batchTransferDraft.rows.map((row, index) => {
+                const rowDup = (row.reference || '').trim() !== '' && referenceExists(allTransfers, row.reference)
+                const rowReceiverPreview = lookupReceiverColor(receiverColorMap, row.receiverName)
+                const rowReceiverClass = getReceiverColorClass(rowReceiverPreview.colorLevel)
+                return (
+                <div className="batch-grid-row" key={row.id}>
+                  <div className="batch-grid-index">{index + 1}</div>
+                  <input
+                    list="sender-name-suggestions"
+                    value={row.senderName}
+                    onChange={(e) => updateBatchRow(row.id, 'senderName', e.target.value)}
+                    placeholder="المرسل"
+                  />
+                  <input
+                    list="receiver-name-suggestions"
+                    className={rowReceiverClass ? `input-${rowReceiverClass}` : ''}
+                    value={row.receiverName}
+                    onChange={(e) => updateBatchRow(row.id, 'receiverName', e.target.value)}
+                    placeholder="المستلم"
+                    title={rowReceiverPreview.total > 0 ? `قديم ${rowReceiverPreview.legacyCount} + نظام ${rowReceiverPreview.systemCount} = ${rowReceiverPreview.total}` : undefined}
+                  />
+                  <input
+                    className={rowDup ? 'input-duplicate-ref' : ''}
+                    value={row.reference}
+                    onChange={(e) => updateBatchRow(row.id, 'reference', e.target.value.toUpperCase())}
+                    placeholder="رقم الحوالة"
+                    title={rowDup ? 'رقم الحوالة موجود مسبقاً' : undefined}
+                  />
+                  <input
+                    className="money-input"
+                    inputMode="decimal"
+                    value={formatEditableNumber(row.transferAmount)}
+                    onChange={(e) => updateBatchRow(row.id, 'transferAmount', normalizeNumberInput(e.target.value))}
+                    placeholder="اختياري"
+                  />
+                  <input
+                    className="money-input"
+                    inputMode="decimal"
+                    value={formatEditableNumber(row.customerAmount)}
+                    onChange={(e) => updateBatchRow(row.id, 'customerAmount', normalizeNumberInput(e.target.value))}
+                    placeholder="اختياري"
+                  />
+                  <button
+                    type="button"
+                    className="ghost-button ghost-button--small"
+                    onClick={() => removeBatchRow(row.id)}
+                    aria-label={`حذف السطر ${index + 1}`}
+                  >
+                    حذف
+                  </button>
+                </div>
+                )
+              })}
+            </div>
+            <div className="batch-transfer-hint">
+              <span>كل سطر = حوالة ويسترن واحدة لنفس الزبون.</span>
+              <span>الحقول المطلوبة: اسم المرسل واسم المستلم ورقم الحوالة.</span>
+              <span>المبلغان اختياريان ويمكن تعبئتهما لاحقًا.</span>
+            </div>
+          </form>
+        )}
+          </>
+        )}
 
         <div className="filter-bar">
           <input
@@ -175,9 +454,11 @@ export default function TransfersTab({
         <div className="panel-head">
           <h2>الحوالات <span className="panel-count">{filteredTransfers.length}</span></h2>
           <div className="totals-line">
-            <span>المستلم: {money(transferSummary.totalSystem)}</span>
-            <span>للزبائن: {money(transferSummary.totalCustomer)}</span>
-            <span>الربح: {money(transferSummary.totalMargin)}</span>
+            <span>المستلم: {formatMoney(transferSummary.totalSystem)}</span>
+            <span>للزبائن: {formatMoney(transferSummary.totalCustomer)}</span>
+            {hideProfit ? null : (
+              <span>الربح: {formatMoney(transferSummary.totalMargin)}</span>
+            )}
           </div>
         </div>
 
@@ -204,7 +485,13 @@ export default function TransfersTab({
                   onTransition={handleTransition}
                   editingId={editingId}
                   setEditingId={setEditingId}
+                  pickupFlowId={pickupFlowId}
+                  setPickupFlowId={setPickupFlowId}
                   onFeedback={onFeedback}
+                  receiverColorMap={receiverColorMap}
+                  duplicateReferences={duplicateReferences}
+                  readOnly={readOnly}
+                  hideProfit={hideProfit}
                 />
               </div>
             )
@@ -219,6 +506,13 @@ export default function TransfersTab({
             onTransition={handleTransition}
             editingId={editingId}
             setEditingId={setEditingId}
+            pickupFlowId={pickupFlowId}
+            setPickupFlowId={setPickupFlowId}
+            onFeedback={onFeedback}
+            receiverColorMap={receiverColorMap}
+            duplicateReferences={duplicateReferences}
+            readOnly={readOnly}
+            hideProfit={hideProfit}
           />
         )}
       </section>
@@ -240,35 +534,73 @@ export default function TransfersTab({
           </div>
 
           {settledOpen ? (
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>الرقم</th>
-                    <th>الزبون</th>
-                    <th>المرسل</th>
-                    <th>تاريخ التسوية</th>
-                    <th>مبلغ الحوالة</th>
-                    <th>للزبون</th>
-                    <th>من الموظف</th>
-                    <th>الربح</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {settledTransfers.map((t) => (
-                    <tr key={t.id} className="row-settled">
-                      <td className="ref-cell">{t.reference}</td>
-                      <td>{customersById.get(t.customerId)?.name}</td>
-                      <td>{t.senderName}</td>
-                      <td className="date-cell">{formatDate(t.settledAt || t.updatedAt)}</td>
-                      <td className="amount-info">{t.transferAmount === null ? '-' : money(t.transferAmount)}</td>
-                      <td>{money(t.customerAmount)}</td>
-                      <td>{money(t.systemAmount)}</td>
-                      <td>{t.margin === null ? '-' : money(t.margin)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="transfer-card-list transfer-card-list--settled">
+              {settledTransfers.map((t) => {
+                const settledRefKey = String(t.reference || '').trim().toUpperCase()
+                const settledIsDup = duplicateReferences && settledRefKey && duplicateReferences.has(settledRefKey)
+                const settledReceiverPreview = lookupReceiverColor(receiverColorMap, t.receiverName)
+                const settledReceiverClass = getReceiverColorClass(settledReceiverPreview.colorLevel)
+                return (
+                  <article
+                    key={t.id}
+                    className={`transfer-card tc-status-picked_up tc-settled ${settledIsDup ? 'tc-duplicate' : ''}`}
+                  >
+                    <div className="tc-stripe" aria-hidden="true" />
+                    <div className="tc-body">
+                      <div className="tc-row tc-row--top">
+                        <div className="tc-ref-block">
+                          <span className="tc-ref">{t.reference}</span>
+                          <span className="tc-date">تسوية: {formatDate(t.settledAt || t.updatedAt)}</span>
+                        </div>
+                        <span className="tc-status-pill tc-status-pill--settled">
+                          <span className="tc-status-icon" aria-hidden="true">✓</span>
+                          مسوّاة
+                        </span>
+                        {settledIsDup ? (
+                          <span className="tc-dup-badge">⚠ مكرر</span>
+                        ) : null}
+                        <div className="tc-customer-slot">
+                          <CustomerBadge customer={customersById.get(t.customerId)} fallbackName={t.receiverName} compact />
+                        </div>
+                        <div className="tc-flow">
+                          <span className="tc-flow-label">المرسل</span>
+                          <span className="tc-sender">{t.senderName}</span>
+                          <span className="tc-arrow" aria-hidden="true">←</span>
+                          <span className="tc-flow-label">المستلم</span>
+                          <span
+                            className={`tc-receiver ${settledReceiverClass}`}
+                            title={settledReceiverPreview.total > 0 ? `قديم ${settledReceiverPreview.legacyCount} + نظام ${settledReceiverPreview.systemCount} = ${settledReceiverPreview.total}` : undefined}
+                          >
+                            {t.receiverName || '-'}
+                            {settledReceiverPreview.total > 0 ? (
+                              <span className="tc-receiver-count">{settledReceiverPreview.total}</span>
+                            ) : null}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="tc-row tc-row--amounts">
+                        <AmountChip label="الحوالة" value={t.transferAmount} kind="transfer" missing={typeof t.transferAmount !== 'number'} />
+                        <span className="tc-amount-sep">←</span>
+                        <AmountChip label="للزبون" value={t.customerAmount} kind="customer" missing={typeof t.customerAmount !== 'number'} />
+                        {hideProfit ? null : (
+                          <>
+                            <span className="tc-amount-sep">←</span>
+                            <AmountChip label="من الموظف" value={t.systemAmount} kind="system" missing={typeof t.systemAmount !== 'number'} />
+                            <span className="tc-amount-sep">=</span>
+                            <AmountChip label="الربح" value={t.margin} kind="margin" highlight={t.margin !== null && t.margin > 0} />
+                          </>
+                        )}
+                      </div>
+                      {t.note ? (
+                        <div className="tc-note">
+                          <span className="tc-note-icon" aria-hidden="true">📝</span>
+                          <span className="tc-note-text">{t.note}</span>
+                        </div>
+                      ) : null}
+                    </div>
+                  </article>
+                )
+              })}
             </div>
           ) : null}
         </section>
@@ -375,208 +707,345 @@ function StatusActions({ item, onTransition }) {
 
 /* ── Transfer table with edit mode ── */
 
-function TransferTable({ items, customers, customersById, onPatchTransfer, onDeleteTransfer, onTransition, editingId, setEditingId, onFeedback }) {
-  return (
-    <div className="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>الرقم</th>
-            <th>الزبون</th>
-            <th>المرسل</th>
-            <th>التاريخ</th>
-            <th>الإجراء</th>
-            <th>مبلغ الحوالة</th>
-            <th>للزبون</th>
-            <th>من الموظف</th>
-            <th>الربح</th>
-            <th>ملاحظة</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {items.map((item) => {
-            const isEditing = editingId === item.id
-            const missingTransfer = typeof item.transferAmount !== 'number'
-            const missingCustomer = typeof item.customerAmount !== 'number'
-            const missingSystem = typeof item.systemAmount !== 'number'
+function TransferTable({
+  items,
+  customers,
+  customersById,
+  onPatchTransfer,
+  onDeleteTransfer,
+  onTransition,
+  editingId,
+  setEditingId,
+  pickupFlowId,
+  setPickupFlowId,
+  onFeedback,
+  receiverColorMap,
+  duplicateReferences,
+  readOnly = false,
+  hideProfit = false,
+}) {
+  function handleSave(item) {
+    const isPickupFlow = pickupFlowId === item.id
+    if (isPickupFlow) {
+      const check = validateTransition(item, 'picked_up')
+      if (!check.ok) {
+        onFeedback(check.error)
+        return
+      }
+      onPatchTransfer(item.id, (row) => transitionTransfer(row, 'picked_up'))
+      setPickupFlowId(null)
+    }
+    setEditingId(null)
+  }
 
-            return (
-              <tr
-                key={item.id}
-                className={
-                  item.status === 'issue' ? 'row-issue'
-                    : item.status === 'picked_up' ? 'row-picked'
-                    : ''
-                }
-              >
-                <td className="ref-cell">
-                  {isEditing ? (
-                    <input
-                      className="table-input"
-                      value={item.reference}
-                      onChange={(e) =>
-                        onPatchTransfer(item.id, (r) => updateTransferField(r, 'reference', e.target.value.toUpperCase()))
-                      }
-                    />
-                  ) : item.reference}
-                </td>
-                <td>
-                  {isEditing ? (
-                    <select
-                      className="table-select"
-                      value={item.customerId}
-                      onChange={(e) =>
-                        onPatchTransfer(item.id, (r) => {
-                          const nextCustomerId = Number(e.target.value)
-                          const customer = customers.find((entry) => entry.id === nextCustomerId)
-                          return {
-                            ...updateTransferField(r, 'customerId', nextCustomerId),
-                            receiverName: customer?.name || r.receiverName,
-                          }
-                        })
-                      }
-                    >
-                      {customers.map((customer) => (
-                        <option key={customer.id} value={customer.id}>{customer.name}</option>
-                      ))}
-                    </select>
-                  ) : (
-                    customersById.get(item.customerId)?.name
+  return (
+    <div className="transfer-card-list">
+      {items.map((item) => {
+        const isEditing = editingId === item.id
+        const isPickupFlow = pickupFlowId === item.id
+        const refKey = String(item.reference || '').trim().toUpperCase()
+        const isDuplicateRef = duplicateReferences && refKey && duplicateReferences.has(refKey)
+        const receiverPreview = lookupReceiverColor(receiverColorMap, item.receiverName)
+        const receiverColorClass = getReceiverColorClass(receiverPreview.colorLevel)
+        const customer = customersById.get(item.customerId)
+
+        const cardClasses = [
+          'transfer-card',
+          `tc-status-${item.status}`,
+          item.settled ? 'tc-settled' : '',
+          isEditing ? 'tc-editing' : '',
+          isDuplicateRef ? 'tc-duplicate' : '',
+        ].filter(Boolean).join(' ')
+
+        return (
+          <article key={item.id} className={cardClasses}>
+            <div className="tc-stripe" aria-hidden="true" />
+
+            <div className="tc-body">
+              <div className="tc-row tc-row--top">
+                <div className="tc-ref-block">
+                  <span className="tc-ref">{item.reference}</span>
+                  <span className="tc-date">{formatDate(item.createdAt)}</span>
+                </div>
+
+                <span className={`tc-status-pill tc-status-pill--${item.status}`}>
+                  <span className="tc-status-icon" aria-hidden="true">{STATUS_ICONS[item.status]}</span>
+                  {statusMeta[item.status]?.label}
+                </span>
+
+                {isDuplicateRef ? (
+                  <span className="tc-dup-badge" title="رقم الحوالة مكرر">⚠ مكرر</span>
+                ) : null}
+
+                <div className="tc-customer-slot">
+                  <CustomerBadge customer={customer} fallbackName={item.receiverName} compact />
+                </div>
+
+                <div className="tc-flow">
+                  <span className="tc-flow-label">المرسل</span>
+                  <span className="tc-sender">{item.senderName || '-'}</span>
+                  <span className="tc-arrow" aria-hidden="true">←</span>
+                  <span className="tc-flow-label">المستلم</span>
+                  <span
+                    className={`tc-receiver ${receiverColorClass}`}
+                    title={receiverPreview.total > 0 ? `قديم ${receiverPreview.legacyCount} + نظام ${receiverPreview.systemCount} = ${receiverPreview.total}` : undefined}
+                  >
+                    {item.receiverName || '-'}
+                    {receiverPreview.total > 0 ? (
+                      <span className="tc-receiver-count">{receiverPreview.total}</span>
+                    ) : null}
+                  </span>
+                </div>
+              </div>
+
+              {!isEditing ? (
+                <div className="tc-row tc-row--amounts">
+                  <AmountChip
+                    label="الحوالة"
+                    value={item.transferAmount}
+                    kind="transfer"
+                    missing={typeof item.transferAmount !== 'number'}
+                  />
+                  <span className="tc-amount-sep">←</span>
+                  <AmountChip
+                    label="للزبون"
+                    value={item.customerAmount}
+                    kind="customer"
+                    missing={typeof item.customerAmount !== 'number'}
+                  />
+                  {hideProfit ? null : (
+                    <>
+                      <span className="tc-amount-sep">←</span>
+                      <AmountChip
+                        label="من الموظف"
+                        value={item.systemAmount}
+                        kind="system"
+                        missing={typeof item.systemAmount !== 'number'}
+                        showWaiting={item.status === 'with_employee'}
+                      />
+                      <span className="tc-amount-sep">=</span>
+                      <AmountChip
+                        label="الربح"
+                        value={item.margin}
+                        kind="margin"
+                        highlight={item.margin !== null && item.margin > 0}
+                      />
+                    </>
                   )}
-                </td>
-                <td>
-                  {isEditing ? (
-                    <input
-                      className="table-input"
-                      value={item.senderName}
-                      onChange={(e) =>
-                        onPatchTransfer(item.id, (r) => updateTransferField(r, 'senderName', e.target.value))
-                      }
-                    />
-                  ) : item.senderName}
-                </td>
-                <td className="date-cell">{formatDate(item.createdAt)}</td>
-                <td>
-                  {isEditing ? (
-                    <select
-                      className="table-select import-status-select"
-                      value={item.status}
-                      onChange={(e) => {
-                        const next = e.target.value
-                        if (next === 'received' && !window.confirm('إعادة الحوالة لـ "جديدة" ستمسح كل المبالغ والتواريخ. هل أنت متأكد؟')) return
-                        const check = validateTransition(item, next)
-                        if (!check.ok) { onFeedback(check.error); return }
-                        onPatchTransfer(item.id, (r) => transitionTransfer(r, next))
+                </div>
+              ) : null}
+
+              {item.note && !isEditing ? (
+                <div className="tc-note">
+                  <span className="tc-note-icon" aria-hidden="true">📝</span>
+                  <span className="tc-note-text">{item.note}</span>
+                </div>
+              ) : null}
+
+              {isEditing ? (
+                <div className="tc-edit-form">
+                  <div className="tc-edit-grid">
+                    <label className="tc-field">
+                      <span>رقم الحوالة</span>
+                      <input
+                        className="tc-input"
+                        value={item.reference}
+                        onChange={(e) =>
+                          onPatchTransfer(item.id, (r) => updateTransferField(r, 'reference', e.target.value.toUpperCase()))
+                        }
+                      />
+                    </label>
+                    <label className="tc-field">
+                      <span>الزبون</span>
+                      <select
+                        className="tc-input"
+                        value={customers.some((c) => c.id === item.customerId) ? item.customerId : ''}
+                        onChange={(e) =>
+                          onPatchTransfer(item.id, (r) => updateTransferField(r, 'customerId', Number(e.target.value)))
+                        }
+                      >
+                        <option value="" disabled>اختر زبوناً</option>
+                        {customers.map((c) => (
+                          <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="tc-field">
+                      <span>المرسل</span>
+                      <input
+                        list="sender-name-suggestions"
+                        className="tc-input"
+                        value={item.senderName || ''}
+                        onChange={(e) =>
+                          onPatchTransfer(item.id, (r) => updateTransferField(r, 'senderName', e.target.value))
+                        }
+                      />
+                    </label>
+                    <label className="tc-field">
+                      <span>المستلم</span>
+                      <input
+                        list="receiver-name-suggestions"
+                        className="tc-input"
+                        value={item.receiverName || ''}
+                        onChange={(e) =>
+                          onPatchTransfer(item.id, (r) => updateTransferField(r, 'receiverName', e.target.value))
+                        }
+                      />
+                    </label>
+                    <label className="tc-field">
+                      <span>الحوالة</span>
+                      <input
+                        className="tc-input money-input"
+                        inputMode="decimal"
+                        value={formatEditableNumber(item.transferAmount ?? '')}
+                        onChange={(e) =>
+                          onPatchTransfer(item.id, (r) => updateAmount(r, 'transferAmount', normalizeNumberInput(e.target.value)))
+                        }
+                      />
+                    </label>
+                    <label className="tc-field">
+                      <span>للزبون</span>
+                      <input
+                        className="tc-input money-input"
+                        inputMode="decimal"
+                        value={formatEditableNumber(item.customerAmount ?? '')}
+                        onChange={(e) =>
+                          onPatchTransfer(item.id, (r) => updateAmount(r, 'customerAmount', normalizeNumberInput(e.target.value)))
+                        }
+                      />
+                    </label>
+                    <label className="tc-field">
+                      <span>من الموظف</span>
+                      <input
+                        className="tc-input money-input"
+                        inputMode="decimal"
+                        value={formatEditableNumber(item.systemAmount ?? '')}
+                        onChange={(e) =>
+                          onPatchTransfer(item.id, (r) => updateAmount(r, 'systemAmount', normalizeNumberInput(e.target.value)))
+                        }
+                      />
+                    </label>
+                    <div className="tc-field tc-field--readonly">
+                      <span>الربح</span>
+                      <div className={`tc-readonly-value ${item.margin !== null && item.margin > 0 ? 'text-green' : ''}`}>
+                        {item.margin === null ? '—' : formatMoney(item.margin)}
+                      </div>
+                    </div>
+                    <label className="tc-field tc-field--full">
+                      <span>ملاحظة</span>
+                      <input
+                        className="tc-input"
+                        value={item.note || ''}
+                        placeholder="اكتب ملاحظة إذا لزم الأمر"
+                        onChange={(e) =>
+                          onPatchTransfer(item.id, (r) => updateTransferField(r, 'note', e.target.value))
+                        }
+                      />
+                    </label>
+                    <div className="tc-field tc-field--full">
+                      <span>الحالة</span>
+                      {isPickupFlow ? (
+                        <div className="tc-pickup-hint">
+                          <span className="status-dot" />
+                          تأكيد السحب بعد الحفظ
+                        </div>
+                      ) : (
+                        <select
+                          className="tc-input"
+                          value={item.status}
+                          onChange={(e) => {
+                            const next = e.target.value
+                            if (next === 'received' && !window.confirm('إعادة الحوالة لـ "جديدة" ستمسح كل المبالغ والتواريخ. هل أنت متأكد؟')) return
+                            const check = validateTransition(item, next)
+                            if (!check.ok) { onFeedback(check.error); return }
+                            onPatchTransfer(item.id, (r) => transitionTransfer(r, next))
+                          }}
+                        >
+                          {statusOrder.map((s) => (
+                            <option key={s} value={s}>{statusMeta[s].label}</option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            {readOnly ? null : (
+              <div className="tc-actions">
+                {!isEditing ? (
+                  <>
+                    <StatusActions item={item} onTransition={onTransition} />
+                    <button
+                      className="tc-btn tc-btn--edit"
+                      onClick={() => setEditingId(item.id)}
+                    >
+                      تعديل
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      className="tc-btn tc-btn--save"
+                      onClick={() => handleSave(item)}
+                    >
+                      {isPickupFlow ? 'حفظ السحب' : 'حفظ'}
+                    </button>
+                    <button
+                      className={isPickupFlow ? 'tc-btn tc-btn--ghost' : 'tc-btn tc-btn--danger'}
+                      onClick={() => {
+                        if (isPickupFlow) {
+                          setPickupFlowId(null)
+                          setEditingId(null)
+                          return
+                        }
+                        if (onDeleteTransfer(item.id)) setEditingId(null)
                       }}
                     >
-                      {statusOrder.map((s) => (
-                        <option key={s} value={s}>{statusMeta[s].label}</option>
-                      ))}
-                    </select>
-                  ) : (
-                    <StatusActions item={item} onTransition={onTransition} />
-                  )}
-                </td>
-
-                {/* مبلغ الحوالة */}
-                <td className={missingTransfer && !isEditing ? 'cell-warning' : 'amount-info'}>
-                  {isEditing ? (
-                    <input
-                      className="table-input"
-                      inputMode="decimal"
-                      value={item.transferAmount ?? ''}
-                      placeholder="مبلغ الحوالة"
-                      onChange={(e) =>
-                        onPatchTransfer(item.id, (r) => updateAmount(r, 'transferAmount', e.target.value))
-                      }
-                    />
-                  ) : (
-                    item.transferAmount === null ? <span className="missing-hint">مطلوب</span> : money(item.transferAmount)
-                  )}
-                </td>
-
-                {/* للزبون */}
-                <td className={missingCustomer && !isEditing ? 'cell-warning' : ''}>
-                  {isEditing ? (
-                    <input
-                      className="table-input"
-                      inputMode="decimal"
-                      value={item.customerAmount ?? ''}
-                      placeholder="كم بنعطوه"
-                      onChange={(e) =>
-                        onPatchTransfer(item.id, (r) => updateAmount(r, 'customerAmount', e.target.value))
-                      }
-                    />
-                  ) : (
-                    item.customerAmount === null ? <span className="missing-hint">مطلوب</span> : money(item.customerAmount)
-                  )}
-                </td>
-
-                {/* المستلم من الموظف */}
-                <td className={missingSystem && item.status === 'with_employee' && !isEditing ? 'cell-warning' : ''}>
-                  {isEditing ? (
-                    <input
-                      className="table-input"
-                      inputMode="decimal"
-                      value={item.systemAmount ?? ''}
-                      placeholder="المستلم من الموظف"
-                      onChange={(e) =>
-                        onPatchTransfer(item.id, (r) => updateAmount(r, 'systemAmount', e.target.value))
-                      }
-                    />
-                  ) : (
-                    item.systemAmount === null
-                      ? (item.status === 'with_employee' ? <span className="missing-hint">ينتظر</span> : '-')
-                      : money(item.systemAmount)
-                  )}
-                </td>
-
-                {/* الربح */}
-                <td className={item.margin !== null && item.margin > 0 ? 'text-green' : ''}>
-                  {item.margin === null ? '-' : money(item.margin)}
-                </td>
-
-                {/* ملاحظة */}
-                <td>
-                  {isEditing ? (
-                    <input
-                      className="table-input"
-                      value={item.note || ''}
-                      placeholder="ملاحظة"
-                      onChange={(e) =>
-                        onPatchTransfer(item.id, (r) => updateTransferField(r, 'note', e.target.value))
-                      }
-                    />
-                  ) : (
-                    <span className="note-text">{item.note || '-'}</span>
-                  )}
-                </td>
-
-                {/* أزرار التحكم */}
-                <td>
-                  <div className="row-actions">
-                    <button
-                      className={`action-btn ${isEditing ? 'action-btn--green' : 'action-btn--blue'} action-btn--xs`}
-                      onClick={() => setEditingId(isEditing ? null : item.id)}
-                    >
-                      {isEditing ? 'حفظ' : 'تعديل'}
+                      {isPickupFlow ? 'إلغاء' : 'حذف'}
                     </button>
-                    {isEditing ? (
-                      <button
-                        className="danger-button"
-                        onClick={() => { if (onDeleteTransfer(item.id)) setEditingId(null) }}
-                      >
-                        حذف
-                      </button>
-                    ) : null}
-                  </div>
-                </td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
+                  </>
+                )}
+              </div>
+            )}
+          </article>
+        )
+      })}
     </div>
+  )
+}
+
+function AmountChip({ label, value, kind, missing, showWaiting, highlight }) {
+  if (missing) {
+    if (kind === 'system' && showWaiting) {
+      return (
+        <span className="amount-chip amount-chip--waiting">
+          <span className="amount-chip-label">{label}</span>
+          <span className="amount-chip-value">ينتظر</span>
+        </span>
+      )
+    }
+    if (kind === 'margin') {
+      return (
+        <span className="amount-chip amount-chip--margin amount-chip--empty">
+          <span className="amount-chip-label">{label}</span>
+          <span className="amount-chip-value">—</span>
+        </span>
+      )
+    }
+    return (
+      <span className="amount-chip amount-chip--missing">
+        <span className="amount-chip-label">{label}</span>
+        <span className="amount-chip-value">مطلوب</span>
+      </span>
+    )
+  }
+
+  return (
+    <span className={`amount-chip amount-chip--${kind}${highlight ? ' amount-chip--highlight' : ''}`}>
+      <span className="amount-chip-label">{label}</span>
+      <span className="amount-chip-value">{formatMoney(value)}</span>
+    </span>
   )
 }
