@@ -295,67 +295,48 @@ export default function TransfersTab({
 
         {entryMode === 'single' ? (
           <form className="transfer-form" onSubmit={onAddTransfer}>
-            <div className="transfer-form__row transfer-form__row--customer">
-              <div className="transfer-form__field transfer-form__field--wide">
-                <label className="transfer-form__label">الزبون</label>
+            <div className="transfer-form__grid">
+              <div className="tf-cell tf-cell--customer">
                 <CustomerPicker
                   customers={customers}
                   value={transferDraft.customerId}
                   onChange={(customerId) => setTransferDraft((c) => ({ ...c, customerId }))}
-                  placeholder="اختر الزبون"
+                  placeholder="الزبون"
                 />
               </div>
-            </div>
-
-            <div className="transfer-form__row transfer-form__row--people">
-              <div className="transfer-form__field">
-                <label className="transfer-form__label">المرسل</label>
+              <div className="tf-cell">
                 <input
                   list="sender-name-suggestions"
                   value={transferDraft.senderName}
                   onChange={(e) => setTransferDraft((c) => ({ ...c, senderName: e.target.value }))}
-                  placeholder="اسم المرسل"
+                  placeholder="المرسل"
                 />
               </div>
-              <div className="transfer-form__field">
-                <label className="transfer-form__label">
-                  المستلم
-                  {transferDraft.receiverName && (singleReceiverPreview.total > 0 || singleReceiverPreview.isTurkish) ? (
-                    <span className={`receiver-inline-hint ${singleReceiverPreviewClass || ''}`}>
-                      {singleReceiverPreview.isTurkish ? <span title="مستلم تركي">🇹🇷</span> : null}
-                      {singleReceiverPreview.total > 0 ? (
-                        <span>{singleReceiverPreview.total} سابقة</span>
-                      ) : null}
-                    </span>
-                  ) : null}
-                </label>
+              <div className="tf-cell tf-cell--receiver">
                 <input
                   list="receiver-name-suggestions"
                   className={singleReceiverPreviewClass ? `input-${singleReceiverPreviewClass}` : ''}
                   value={transferDraft.receiverName}
                   onChange={(e) => setTransferDraft((c) => ({ ...c, receiverName: e.target.value }))}
-                  placeholder="اسم المستلم"
+                  placeholder="المستلم"
                 />
+                {transferDraft.receiverName && (singleReceiverPreview.total > 0 || singleReceiverPreview.isTurkish) ? (
+                  <span className={`tf-float-chip ${singleReceiverPreviewClass || ''}`}>
+                    {singleReceiverPreview.isTurkish ? <span title="مستلم تركي">🇹🇷</span> : null}
+                    {singleReceiverPreview.total > 0 ? <span>{singleReceiverPreview.total}</span> : null}
+                  </span>
+                ) : null}
               </div>
-            </div>
-
-            <div className="transfer-form__row transfer-form__row--details">
-              <div className="transfer-form__field">
-                <label className="transfer-form__label">
-                  رقم الحوالة
-                  {singleRefDuplicate ? (
-                    <span className="field-badge field-badge--warn">⚠ مكرّر</span>
-                  ) : null}
-                </label>
+              <div className="tf-cell tf-cell--ref">
                 <input
                   className={singleRefDuplicate ? 'input-duplicate-ref' : ''}
                   value={transferDraft.reference}
                   onChange={(e) => setTransferDraft((c) => ({ ...c, reference: e.target.value.toUpperCase() }))}
                   placeholder="رقم الحوالة"
                 />
+                {singleRefDuplicate ? <span className="tf-float-chip tf-float-chip--warn">⚠</span> : null}
               </div>
-              <div className="transfer-form__field transfer-form__field--money">
-                <label className="transfer-form__label">مبلغ الحوالة</label>
+              <div className="tf-cell">
                 <input
                   className="money-input"
                   inputMode="decimal"
@@ -364,36 +345,23 @@ export default function TransfersTab({
                   placeholder="المبلغ"
                 />
               </div>
-              <div className="transfer-form__field transfer-form__field--money">
-                <label className="transfer-form__label">للزبون</label>
+              <div className="tf-cell">
                 <input
                   className="money-input"
                   inputMode="decimal"
                   value={formatEditableNumber(transferDraft.customerAmount)}
                   onChange={(e) => setTransferDraft((c) => ({ ...c, customerAmount: normalizeNumberInput(e.target.value) }))}
-                  placeholder="كم بنعطوه"
+                  placeholder="للزبون"
                 />
               </div>
-            </div>
-
-            <div className="transfer-form__submit">
               <button
                 type="submit"
                 disabled={!singleFormValid}
                 className={`transfer-submit${singleRefDuplicate ? ' transfer-submit--dup' : ''}`}
-                title={singleMissingField || ''}
+                title={singleMissingField ? `المطلوب: ${singleMissingField}` : singleRefDuplicate ? 'رقم مكرّر — سيُحفظ بالأحمر' : 'جاهزة للحفظ'}
               >
-                {singleRefDuplicate ? '⚠ حفظ كحوالة مكرّرة' : '＋ حفظ الحوالة'}
+                {singleRefDuplicate ? '⚠ حفظ' : '＋ حفظ'}
               </button>
-              {!singleFormValid ? (
-                <span className="transfer-submit__hint">المطلوب: {singleMissingField}</span>
-              ) : singleRefDuplicate ? (
-                <span className="transfer-submit__hint transfer-submit__hint--warn">
-                  الرقم موجود مسبقاً — ستُحفظ ومميّزة بالأحمر
-                </span>
-              ) : (
-                <span className="transfer-submit__hint transfer-submit__hint--ok">جاهزة للحفظ ✓</span>
-              )}
             </div>
           </form>
         ) : (

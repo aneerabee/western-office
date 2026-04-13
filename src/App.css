@@ -3844,61 +3844,59 @@ tbody tr:hover {
 
 /* ─── Redesigned add-transfer card ─── */
 .transfer-card {
-  background: linear-gradient(180deg, var(--surface), color-mix(in srgb, var(--surface) 92%, var(--bg)));
+  background: linear-gradient(180deg, var(--surface), color-mix(in srgb, var(--surface) 94%, var(--bg)));
 }
 
 .transfer-card__head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 14px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--border);
+  gap: 10px;
+  margin-bottom: 10px;
 }
 
 .transfer-card__title {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .transfer-card__title h2 {
   margin: 0;
-  font-size: 1rem;
+  font-size: 0.95rem;
 }
 
 .transfer-card__title-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 8px;
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
   background: linear-gradient(180deg, color-mix(in srgb, var(--green) 90%, white), var(--green));
   color: #fff;
   font-weight: 800;
-  font-size: 0.95rem;
-  box-shadow: 0 4px 10px rgba(61, 122, 93, 0.22);
+  font-size: 0.9rem;
+  box-shadow: 0 3px 8px rgba(61, 122, 93, 0.25);
 }
 
 .segmented {
   display: inline-flex;
-  gap: 3px;
-  padding: 3px;
+  gap: 2px;
+  padding: 2px;
   background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 9px;
 }
 
 .segmented__btn {
   border: none;
   background: transparent;
   color: var(--ink-soft);
-  padding: 6px 14px;
+  padding: 5px 12px;
   border-radius: 7px;
   font-weight: 700;
-  font-size: 0.82rem;
+  font-size: 0.78rem;
   transition: background 0.15s, color 0.15s, box-shadow 0.15s;
 }
 
@@ -3915,116 +3913,77 @@ tbody tr:hover {
 }
 
 .transfer-form {
+  margin-bottom: 10px;
+}
+
+.transfer-form__grid {
   display: grid;
-  gap: 12px;
-  margin-bottom: 14px;
-}
-
-.transfer-form__row {
-  display: grid;
-  gap: 10px;
-}
-
-.transfer-form__row--customer {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.transfer-form__row--people {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-}
-
-.transfer-form__row--details {
-  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr);
-}
-
-.transfer-form__field {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  min-width: 0;
-}
-
-.transfer-form__field--wide {
-  width: 100%;
-}
-
-.transfer-form__label {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  grid-template-columns:
+    minmax(140px, 1.4fr)
+    minmax(110px, 1fr)
+    minmax(110px, 1fr)
+    minmax(110px, 1fr)
+    minmax(90px, 0.8fr)
+    minmax(90px, 0.8fr)
+    auto;
   gap: 6px;
-  font-size: 0.72rem;
-  font-weight: 700;
-  color: var(--ink-soft);
-  padding-inline-start: 2px;
+  align-items: center;
 }
 
-.transfer-form__field input,
-.transfer-form__field .customer-picker-trigger {
+.tf-cell {
+  position: relative;
+  min-width: 0;
+}
+
+.tf-cell input,
+.tf-cell .customer-picker-trigger {
   width: 100%;
   min-width: 0;
 }
 
-.transfer-form__field--money input {
-  max-width: 100%;
-  min-width: 0 !important;
-}
+.tf-cell--customer { min-width: 0; }
 
-.field-badge {
+.tf-float-chip {
+  position: absolute;
+  top: -7px;
+  inset-inline-end: 6px;
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  padding: 2px 7px;
+  padding: 1px 6px;
   border-radius: 999px;
-  font-size: 0.68rem;
-  font-weight: 700;
-  line-height: 1;
+  font-size: 0.64rem;
+  font-weight: 800;
+  line-height: 1.4;
+  background: var(--blue);
+  color: #fff;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.3);
+  pointer-events: none;
 }
 
-.field-badge--warn {
-  background: #fef3c7;
-  color: #92400e;
-  border: 1px solid #fde68a;
+.tf-float-chip.receiver-level-yellow {
+  background: #f59e0b;
+  box-shadow: 0 2px 6px rgba(245, 158, 11, 0.35);
 }
 
-.receiver-inline-hint {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 2px 7px;
-  border-radius: 999px;
-  font-size: 0.68rem;
-  font-weight: 700;
-  background: rgba(37, 99, 235, 0.08);
-  color: var(--blue);
+.tf-float-chip.receiver-level-red,
+.tf-float-chip.receiver-level-red-striped {
+  background: var(--red);
+  box-shadow: 0 2px 6px rgba(220, 38, 38, 0.35);
 }
 
-.receiver-inline-hint.receiver-level-yellow {
-  background: rgba(234, 179, 8, 0.12);
-  color: #a16207;
-}
-
-.receiver-inline-hint.receiver-level-red,
-.receiver-inline-hint.receiver-level-red-striped {
-  background: rgba(220, 38, 38, 0.1);
-  color: var(--red);
-}
-
-.transfer-form__submit {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-  padding-top: 6px;
-  border-top: 1px dashed var(--border);
+.tf-float-chip--warn {
+  background: #f59e0b;
+  box-shadow: 0 2px 6px rgba(245, 158, 11, 0.35);
 }
 
 .transfer-submit {
   background: linear-gradient(180deg, color-mix(in srgb, var(--green) 90%, white), var(--green));
   color: #fff;
-  box-shadow: 0 8px 18px rgba(61, 122, 93, 0.22);
-  padding: 10px 22px;
-  font-size: 0.9rem;
+  box-shadow: 0 6px 14px rgba(61, 122, 93, 0.22);
+  padding: 9px 16px;
+  font-size: 0.85rem;
+  white-space: nowrap;
 }
 
 .transfer-submit:disabled {
@@ -4037,21 +3996,7 @@ tbody tr:hover {
 .transfer-submit--dup {
   background: linear-gradient(180deg, #fbbf24, #f59e0b);
   color: #78350f;
-  box-shadow: 0 8px 18px rgba(245, 158, 11, 0.28);
-}
-
-.transfer-submit__hint {
-  font-size: 0.76rem;
-  color: var(--ink-soft);
-  font-weight: 600;
-}
-
-.transfer-submit__hint--ok {
-  color: var(--green);
-}
-
-.transfer-submit__hint--warn {
-  color: #92400e;
+  box-shadow: 0 6px 14px rgba(245, 158, 11, 0.28);
 }
 
 /* ─── Smart search bar ─── */
@@ -4174,31 +4119,31 @@ tbody tr:hover {
 
 .advanced-filters > * { min-width: 0; }
 
+@media (max-width: 900px) {
+  .transfer-form__grid {
+    grid-template-columns:
+      minmax(0, 1fr)
+      minmax(0, 1fr)
+      minmax(0, 1fr);
+  }
+  .tf-cell--customer { grid-column: 1 / -1; }
+  .transfer-submit { grid-column: 1 / -1; width: 100%; }
+}
+
 @media (max-width: 720px) {
   .transfer-card__head {
     flex-direction: column;
     align-items: stretch;
-    gap: 10px;
+    gap: 8px;
   }
   .segmented {
     display: flex;
     width: 100%;
   }
   .segmented__btn { flex: 1; }
-  .transfer-form__row--people,
-  .transfer-form__row--details {
-    grid-template-columns: minmax(0, 1fr);
+  .transfer-form__grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
-  .transfer-search-bar {
-    flex-direction: row;
-  }
-  .transfer-search-bar__toggle {
-    padding: 9px 12px;
-  }
-  .transfer-form__submit {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  .transfer-submit { width: 100%; }
-  .transfer-submit__hint { text-align: center; }
+  .tf-cell--customer { grid-column: 1 / -1; }
+  .transfer-submit { grid-column: 1 / -1; width: 100%; }
 }
