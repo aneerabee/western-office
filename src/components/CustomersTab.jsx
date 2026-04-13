@@ -123,10 +123,11 @@ function StatusActions({ item, onTransition }) {
           مشكلة
         </button>
         <button
-          className="action-btn action-btn--blue action-btn--xs"
+          className="action-btn action-btn--red action-btn--xs"
           onClick={() => onTransition(item, 'received')}
+          title="إعادة هذه الحوالة فقط لحالة جديدة (مسح المبالغ والتواريخ)"
         >
-          أعدها جديدة
+          ⚠ أعدها جديدة
         </button>
       </div>
     )
@@ -141,10 +142,11 @@ function StatusActions({ item, onTransition }) {
   if (item.status === 'issue') {
     return (
       <button
-        className="action-btn action-btn--blue action-btn--xs"
+        className="action-btn action-btn--red action-btn--xs"
         onClick={() => onTransition(item, 'received')}
+        title="إعادة هذه الحوالة فقط لحالة جديدة (مسح المبالغ والتواريخ)"
       >
-        أعدها جديدة
+        ⚠ أعدها جديدة
       </button>
     )
   }
@@ -161,6 +163,7 @@ export default function CustomersTab({
   onDeleteCustomer,
   transfers,
   onPatchTransfer,
+  onResetTransfer,
   onFeedback,
   ledgerEntries,
   receiverColorMap,
@@ -215,7 +218,9 @@ export default function CustomersTab({
 
   function safeTransition(item, nextStatus) {
     if (nextStatus === 'received') {
-      if (!window.confirm('إعادة الحوالة لـ "جديدة" ستمسح كل المبالغ والتواريخ. هل أنت متأكد؟')) return
+      // Centralized rich confirm + undo flow lives in App.jsx
+      onResetTransfer?.(item)
+      return
     }
     const check = validateTransition(item, nextStatus)
     if (!check.ok) {

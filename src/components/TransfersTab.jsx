@@ -120,6 +120,7 @@ export default function TransfersTab({
   onAddTransferBatch,
   onPatchTransfer,
   onDeleteTransfer,
+  onResetTransfer,
   searchTerm,
   setSearchTerm,
   statusFilter,
@@ -179,7 +180,9 @@ export default function TransfersTab({
 
   function handleTransition(item, nextStatus) {
     if (nextStatus === 'received') {
-      if (!window.confirm('إعادة الحوالة لـ "جديدة" ستمسح كل المبالغ والتواريخ. هل أنت متأكد؟')) return
+      // Centralized rich confirm + undo flow lives in App.jsx
+      onResetTransfer?.(item)
+      return
     }
     const check = validateTransition(item, nextStatus)
     if (!check.ok) {
@@ -484,6 +487,7 @@ export default function TransfersTab({
                   customersById={customersById}
                   onPatchTransfer={onPatchTransfer}
                   onDeleteTransfer={onDeleteTransfer}
+                  onResetTransfer={onResetTransfer}
                   onTransition={handleTransition}
                   editingId={editingId}
                   setEditingId={setEditingId}
@@ -505,6 +509,7 @@ export default function TransfersTab({
             customersById={customersById}
             onPatchTransfer={onPatchTransfer}
             onDeleteTransfer={onDeleteTransfer}
+            onResetTransfer={onResetTransfer}
             onTransition={handleTransition}
             editingId={editingId}
             setEditingId={setEditingId}
@@ -683,10 +688,11 @@ function StatusActions({ item, onTransition }) {
           مشكلة
         </button>
         <button
-          className="action-btn action-btn--blue"
+          className="action-btn action-btn--red"
           onClick={() => onTransition(item, 'received')}
+          title="إعادة هذه الحوالة فقط لحالة جديدة (مسح المبالغ والتواريخ)"
         >
-          أعدها جديدة
+          ⚠ أعدها جديدة
         </button>
       </div>
     )
@@ -697,10 +703,11 @@ function StatusActions({ item, onTransition }) {
   if (item.status === 'issue') {
     return (
       <button
-        className="action-btn action-btn--blue"
+        className="action-btn action-btn--red"
         onClick={() => onTransition(item, 'received')}
+        title="إعادة هذه الحوالة فقط لحالة جديدة (مسح المبالغ والتواريخ)"
       >
-        أعدها جديدة
+        ⚠ أعدها جديدة
       </button>
     )
   }
@@ -715,6 +722,7 @@ function TransferTable({
   customersById,
   onPatchTransfer,
   onDeleteTransfer,
+  onResetTransfer,
   onTransition,
   editingId,
   setEditingId,
@@ -957,7 +965,10 @@ function TransferTable({
                           value={item.status}
                           onChange={(e) => {
                             const next = e.target.value
-                            if (next === 'received' && !window.confirm('إعادة الحوالة لـ "جديدة" ستمسح كل المبالغ والتواريخ. هل أنت متأكد؟')) return
+                            if (next === 'received') {
+                              onResetTransfer?.(item)
+                              return
+                            }
                             const check = validateTransition(item, next)
                             if (!check.ok) { onFeedback(check.error); return }
                             onPatchTransfer(item.id, (r) => transitionTransfer(r, next))
@@ -970,6 +981,7 @@ function TransferTable({
                       )}
                     </div>
                   </div>
+                  <TransferHistoryView history={item.history} />
                 </div>
               ) : null}
             </div>
@@ -1014,6 +1026,121 @@ function TransferTable({
           </article>
         )
       })}
+    </div>
+  )
+}
+
+/* ── Transfer history view (read-only) ── */
+const HISTORY_FIELD_LABELS = {
+  status: 'الحالة',
+  reference: 'رقم الحوالة',
+  customerId: 'الزبون',
+  senderName: 'المرسل',
+  receiverName: 'المستلم',
+  transferAmount: 'مبلغ الحوالة',
+  customerAmount: 'مبلغ الزبون',
+  systemAmount: 'مبلغ الموظف',
+  margin: 'الربح',
+  note: 'ملاحظة',
+  issueCode: 'نوع المشكلة',
+}
+
+function formatHistoryValue(value) {
+  if (value == null || value === '') return '—'
+  return String(value)
+}
+
+function formatHistoryDate(iso) {
+  if (!iso) return ''
+  try {
+    return new Intl.DateTimeFormat('ar', {
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(new Date(iso))
+  } catch {
+    return ''
+  }
+}
+
+function TransferHistoryView({ history }) {
+  const [open, setOpen] = useState(false)
+  const items = Array.isArray(history) ? history : []
+  if (items.length === 0) {
+    return (
+      <div className="tc-history-wrap">
+        <div className="tc-history-empty">📜 لا يوجد سجلّ تاريخي لهذه الحوالة بعد</div>
+      </div>
+    )
+  }
+  // Newest first
+  const sorted = [...items].reverse()
+  const visible = open ? sorted : sorted.slice(0, 5)
+  return (
+    <div className="tc-history-wrap">
+      <button
+        type="button"
+        className="tc-history-toggle"
+        onClick={() => setOpen((v) => !v)}
+        style={{
+          background: '#f1f5f9',
+          border: '1px solid #cbd5e1',
+          padding: '6px 12px',
+          borderRadius: 6,
+          cursor: 'pointer',
+          fontWeight: 'bold',
+          width: '100%',
+          textAlign: 'right',
+        }}
+      >
+        📜 السجلّ التاريخي ({items.length}) {open ? '▲' : '▼'}
+      </button>
+      <ul
+        className="tc-history-list"
+        style={{
+          listStyle: 'none',
+          padding: 0,
+          margin: '8px 0 0 0',
+          maxHeight: open ? 'none' : 220,
+          overflow: open ? 'visible' : 'auto',
+          fontSize: '0.85rem',
+        }}
+      >
+        {visible.map((entry, i) => {
+          const fieldLabel = HISTORY_FIELD_LABELS[entry.field] || entry.field
+          return (
+            <li
+              key={i}
+              style={{
+                padding: '6px 8px',
+                borderBottom: '1px solid #e2e8f0',
+                display: 'flex',
+                gap: 8,
+                flexWrap: 'wrap',
+                alignItems: 'baseline',
+              }}
+            >
+              <span style={{ color: '#64748b', minWidth: 90 }}>
+                {formatHistoryDate(entry.at)}
+              </span>
+              <strong style={{ color: '#0f172a' }}>{fieldLabel}:</strong>
+              <span style={{ color: '#dc2626', textDecoration: 'line-through' }}>
+                {formatHistoryValue(entry.from)}
+              </span>
+              <span style={{ color: '#64748b' }}>←</span>
+              <span style={{ color: '#16a34a', fontWeight: 'bold' }}>
+                {formatHistoryValue(entry.to)}
+              </span>
+            </li>
+          )
+        })}
+        {!open && sorted.length > 5 ? (
+          <li style={{ padding: '6px 8px', color: '#64748b', textAlign: 'center' }}>
+            ... + {sorted.length - 5} تغيير أقدم — اضغط الزر أعلاه للعرض الكامل
+          </li>
+        ) : null}
+      </ul>
     </div>
   )
 }

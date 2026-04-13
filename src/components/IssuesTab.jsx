@@ -1,5 +1,5 @@
 import { issueCatalog } from '../sampleData'
-import { transitionTransfer, updateTransferField, validateTransition } from '../lib/transferLogic'
+import { updateTransferField } from '../lib/transferLogic'
 import { getReceiverColorClass, lookupReceiverColor } from '../lib/people'
 import CustomerBadge from './CustomerBadge'
 
@@ -32,6 +32,7 @@ export default function IssuesTab({
   transfers,
   customersById,
   onPatchTransfer,
+  onResetTransfer,
   onFeedback,
   receiverColorMap,
   duplicateReferences,
@@ -47,16 +48,6 @@ export default function IssuesTab({
 
   const labels = Object.fromEntries(issueCatalog.map((i) => [i.code, i.label]))
   labels.unknown = 'غير محدد'
-
-  function reopenTransfer(item) {
-    if (!window.confirm('إعادة الحوالة لـ "جديدة" ستمسح كل المبالغ والتواريخ. هل أنت متأكد؟')) return
-    const check = validateTransition(item, 'received')
-    if (!check.ok) {
-      onFeedback?.(check.error)
-      return
-    }
-    onPatchTransfer(item.id, (r) => transitionTransfer(r, 'received'))
-  }
 
   return (
     <section className="panel issues-panel">
@@ -158,11 +149,11 @@ export default function IssuesTab({
 
                     <div className="issue-card-actions">
                       <button
-                        className="tc-btn tc-btn--save"
-                        onClick={() => reopenTransfer(t)}
-                        title="إعادة الحوالة لحالة جديدة"
+                        className="tc-btn tc-btn--danger"
+                        onClick={() => onResetTransfer?.(t)}
+                        title="إعادة هذه الحوالة فقط لحالة جديدة (مسح المبالغ والتواريخ)"
                       >
-                        أعدها جديدة
+                        ⚠ أعدها جديدة
                       </button>
                     </div>
                   </article>

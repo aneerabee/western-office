@@ -18,6 +18,7 @@ import {
   sortTransfers,
   summarizeCustomers,
   summarizeTransfers,
+  transitionTransfer,
 } from './lib/transferLogic'
 import {
   buildOpeningBalanceEntry,
@@ -139,6 +140,12 @@ function App() {
   const [saveStatus, setSaveStatus] = useState('idle') // idle|saving|retrying|saved|failed
   const [localStorageFailed, setLocalStorageFailed] = useState(false)
   const [viewerInvalid, setViewerInvalid] = useState(false)
+  // Pending undo: when a destructive reset happens, we keep a snapshot of
+  // the previous transfer state for 2 minutes so the user can restore it.
+  // Shape: { transferId, snapshot, customerName, reference, expiresAt }
+  const [pendingUndo, setPendingUndo] = useState(null)
+  // Tick used to refresh the undo countdown UI once per second
+  const [undoTick, setUndoTick] = useState(0)
   const pendingSaveRef = useRef(0)
   const broadcastChannelRef = useRef(null)
   const [state, setState] = useState(FALLBACK_STATE)
@@ -532,6 +539,97 @@ function App() {
     setFeedback('تمت استعادة الزبون.')
   }
 
+  // ── Reset-to-new with undo ────────────────────────────────────────────
+  // Auto-clear pending undo after 2 minutes
+  useEffect(() => {
+    if (!pendingUndo) return
+    const remaining = pendingUndo.expiresAt - Date.now()
+    if (remaining <= 0) {
+      setPendingUndo(null)
+      return
+    }
+    const timer = setTimeout(() => setPendingUndo(null), remaining)
+    return () => clearTimeout(timer)
+  }, [pendingUndo])
+
+  // Tick countdown once per second so the banner shows seconds remaining
+  useEffect(() => {
+    if (!pendingUndo) return
+    const interval = setInterval(() => setUndoTick((n) => n + 1), 1000)
+    return () => clearInterval(interval)
+  }, [pendingUndo])
+
+  /**
+   * Reset a single transfer back to the "received" (new) status, wiping
+   * its amounts and dates. Called from any tab via the onResetTransfer
+   * callback. Shows a rich confirmation dialog and registers a 2-minute
+   * undo snapshot.
+   */
+  function resetTransferToNew(item) {
+    if (blockIfReadOnly()) return
+    if (!item || !item.id) return
+
+    const customer = rawCustomers.find((c) => c.id === item.customerId)
+    const customerName = customer?.name || 'غير معروف'
+
+    const lines = [
+      '⚠ تنبيه — إعادة حوالة واحدة فقط إلى حالة "جديدة"',
+      '',
+      `رقم الحوالة: ${item.reference || '(بدون رقم)'}`,
+      `الزبون: ${customerName}`,
+    ]
+    if (item.senderName) lines.push(`المرسل: ${item.senderName}`)
+    if (item.receiverName) lines.push(`المستلم: ${item.receiverName}`)
+    lines.push('')
+    lines.push('سيتم حذف هذه البيانات من هذه الحوالة فقط:')
+    if (item.transferAmount != null) lines.push(`• مبلغ الحوالة: ${item.transferAmount}`)
+    if (item.systemAmount != null) lines.push(`• مبلغ الموظف: ${item.systemAmount}`)
+    if (item.customerAmount != null) lines.push(`• مبلغ الزبون: ${item.customerAmount}`)
+    if (item.margin != null) lines.push(`• الربح: ${item.margin}`)
+    if (item.pickedUpAt) lines.push('• تاريخ السحب')
+    if (item.settledAt) lines.push('• تاريخ التسوية وعلامة "تمت التسوية"')
+    if (item.issueAt) lines.push('• تاريخ المشكلة ونوعها')
+    if (item.sentAt) lines.push('• تاريخ الإرسال للموظف')
+    lines.push('')
+    lines.push('✅ باقي حوالاتك لن تتأثر إطلاقاً.')
+    lines.push('⏱ سيظهر زر "تراجع" لمدة دقيقتين بعد التنفيذ.')
+    lines.push('')
+    lines.push('هل تريد المتابعة؟')
+
+    if (!window.confirm(lines.join('\n'))) return
+
+    // Capture full snapshot before mutation
+    const snapshot = { ...item }
+
+    setState((s) => ({
+      ...s,
+      transfers: s.transfers.map((t) => (t.id === item.id ? transitionTransfer(t, 'received') : t)),
+    }))
+
+    setPendingUndo({
+      transferId: item.id,
+      snapshot,
+      customerName,
+      reference: item.reference || '(بدون رقم)',
+      expiresAt: Date.now() + 120 * 1000,
+    })
+    setFeedback(`تم إعادة الحوالة ${item.reference || ''}. زر التراجع متاح لمدة دقيقتين أعلى الصفحة.`)
+  }
+
+  /**
+   * Restore the most recent reset transfer to its prior state.
+   */
+  function performUndo() {
+    if (!pendingUndo) return
+    const { transferId, snapshot, reference } = pendingUndo
+    setState((s) => ({
+      ...s,
+      transfers: s.transfers.map((t) => (t.id === transferId ? snapshot : t)),
+    }))
+    setPendingUndo(null)
+    setFeedback(`تم استرجاع الحوالة ${reference} إلى حالتها السابقة.`)
+  }
+
   const deletedTransfers = useMemo(
     () => rawTransfers.filter((t) => t.deletedAt).sort((a, b) => new Date(b.deletedAt).getTime() - new Date(a.deletedAt).getTime()),
     [rawTransfers],
@@ -903,6 +1001,13 @@ function App() {
     return customers.find((c) => Number(c.id) === Number(viewerCustomerId)) || null
   }, [customers, isViewerMode, viewerCustomerId])
 
+  // Seconds remaining on the undo banner — recomputed every second via undoTick
+  const undoSecondsRemaining = useMemo(() => {
+    if (!pendingUndo) return 0
+    return Math.max(0, Math.ceil((pendingUndo.expiresAt - Date.now()) / 1000))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingUndo, undoTick])
+
   // Invalid viewer URL (customer not found / deleted) — show error page only
   if (viewerInvalid) {
     return (
@@ -995,6 +1100,62 @@ function App() {
         <div className="feedback-banner" onClick={() => setFeedback('')}>{feedback}</div>
       ) : null}
 
+      {pendingUndo ? (
+        <div
+          className="undo-banner"
+          style={{
+            background: '#fef3c7',
+            border: '1px solid #f59e0b',
+            borderRadius: 8,
+            padding: '10px 14px',
+            margin: '8px 12px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            flexWrap: 'wrap',
+            fontSize: '0.92rem',
+          }}
+        >
+          <span style={{ flex: '1 1 auto', minWidth: 0 }}>
+            ↩️ تم إعادة الحوالة <strong>{pendingUndo.reference}</strong>
+            {pendingUndo.customerName ? ` (${pendingUndo.customerName})` : ''} إلى "جديدة".
+          </span>
+          <span style={{ color: '#92400e', fontVariantNumeric: 'tabular-nums' }}>
+            ⏱ {undoSecondsRemaining} ثانية
+          </span>
+          <button
+            type="button"
+            onClick={performUndo}
+            style={{
+              background: '#dc2626',
+              color: '#fff',
+              border: 'none',
+              borderRadius: 6,
+              padding: '6px 14px',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+            }}
+          >
+            ↶ تراجع
+          </button>
+          <button
+            type="button"
+            onClick={() => setPendingUndo(null)}
+            style={{
+              background: 'transparent',
+              border: '1px solid #92400e',
+              color: '#92400e',
+              borderRadius: 6,
+              padding: '4px 10px',
+              cursor: 'pointer',
+              fontSize: '0.85rem',
+            }}
+          >
+            إخفاء
+          </button>
+        </div>
+      ) : null}
+
       <StatsHero
         transferSummary={transferSummary}
         officeSummary={officeSummary}
@@ -1017,6 +1178,7 @@ function App() {
           onAddTransferBatch={handleAddTransferBatch}
           onPatchTransfer={patchTransfer}
           onDeleteTransfer={deleteTransfer}
+          onResetTransfer={resetTransferToNew}
           searchTerm={searchTerm}
           setSearchTerm={setSearchTerm}
           statusFilter={statusFilter}
@@ -1054,6 +1216,7 @@ function App() {
           onDeleteCustomer={handleDeleteCustomer}
           transfers={transfers}
           onPatchTransfer={patchTransfer}
+          onResetTransfer={resetTransferToNew}
           onFeedback={setFeedback}
           ledgerEntries={ledgerEntries}
           receiverColorMap={receiverColorMap}
@@ -1095,6 +1258,7 @@ function App() {
           transfers={transfers}
           customersById={customersById}
           onPatchTransfer={patchTransfer}
+          onResetTransfer={resetTransferToNew}
           onFeedback={setFeedback}
           receiverColorMap={receiverColorMap}
           duplicateReferences={duplicateReferences}
