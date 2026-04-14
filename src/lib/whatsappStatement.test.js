@@ -122,12 +122,13 @@ describe('buildCustomerWhatsappMessage', () => {
     expect(msg).toContain('800')
   })
 
-  it('includes the already-settled amount', () => {
+  it('shows the most recent settlement in its own section', () => {
     const customer = mkCustomer({ id: 100, name: 'بندريس' })
     const transfers = [
       mkTransfer({ id: 1, customerId: 100, status: 'picked_up', settled: true, customerAmount: 1000, settledAt: '2026-04-13T10:00:00.000Z' }),
     ]
     const msg = buildCustomerWhatsappMessage({ customer, transfers, ledgerEntries: [] })
+    expect(msg).toContain('آخر تسوية')
     expect(msg).toContain('1,000')
   })
 
@@ -237,12 +238,12 @@ describe('buildCustomerWhatsappMessage', () => {
   })
 
   /*
-    Regression test: the settled amount must come from a summarize
-    function that actually tracks settled amounts per customer.
-    This test uses isolated reference/amount values so that the
-    settled amount cannot accidentally appear via unrelated context.
+    Regression test: the owed-now and last-settlement amounts must come
+    from summarize functions that actually track them per customer.
+    Uses isolated reference/amount values so each number cannot accidentally
+    appear via unrelated context.
   */
-  it('shows the settled amount as a distinct labeled line — exact amount isolated from other numbers', () => {
+  it('shows the owed-now and last-settlement amounts as distinct labeled lines', () => {
     const customer = mkCustomer({ id: 200, name: 'اختبار التسوية' })
     // Two settled (totals = 777 + 888 = 1665) and one unsettled (123)
     const transfers = [
@@ -252,15 +253,15 @@ describe('buildCustomerWhatsappMessage', () => {
     ]
     const msg = buildCustomerWhatsappMessage({ customer, transfers, ledgerEntries: [] })
 
-    // Find the "استلمت سابقاً" line and check it shows exactly 1,665
-    const settledLineMatch = msg.match(/استلمت سابقاً:\s*([0-9,]+)/)
-    expect(settledLineMatch).not.toBeNull()
-    expect(settledLineMatch[1]).toBe('1,665')
-
-    // And the owed-now line shows exactly 123 (new label: "مستحق لك الآن")
-    const owedLineMatch = msg.match(/مستحق لك الآن:\s*\*?([0-9,]+)\*?/)
+    // Owed-now line shows exactly 123$
+    const owedLineMatch = msg.match(/المستحق لك الآن:\s*\*?([0-9,]+)\$?\*?/)
     expect(owedLineMatch).not.toBeNull()
     expect(owedLineMatch[1]).toBe('123')
+
+    // Last-settlement amount line shows exactly 1,665$
+    const settlementMatch = msg.match(/آخر تسوية[\s\S]*?المبلغ:\s*([0-9,]+)\$/)
+    expect(settlementMatch).not.toBeNull()
+    expect(settlementMatch[1]).toBe('1,665')
   })
 
   it('counts status buckets correctly (received / with_employee / issue / unsettled)', () => {
@@ -274,10 +275,10 @@ describe('buildCustomerWhatsappMessage', () => {
       mkTransfer({ id: 6, customerId: 300, reference: 'F', status: 'picked_up', settled: false, customerAmount: 300 }),
     ]
     const msg = buildCustomerWhatsappMessage({ customer, transfers, ledgerEntries: [] })
-    expect(msg).toMatch(/جديدة \(لم تُرسل للموظف\): 1/)
-    expect(msg).toMatch(/عند الموظف: 2/)
-    expect(msg).toMatch(/فيها مشاكل غير محلولة: 1/)
-    expect(msg).toMatch(/مسحوبة وتنتظر التسوية: 2 حوالة \(800\)/)
+    expect(msg).toMatch(/جديدة لم تُرسل للموظف: 1 حوالة/)
+    expect(msg).toMatch(/عند الموظف: 2 حوالة/)
+    expect(msg).toMatch(/فيها مشاكل غير محلولة: 1 حوالة/)
+    expect(msg).toMatch(/مسحوبة وتنتظر التسوية: 2 حوالة \(بقيمة 800\$\)/)
   })
 
   it('today section shows pickedUp and new counts when there is activity today', () => {
@@ -299,8 +300,8 @@ describe('buildCustomerWhatsappMessage', () => {
     ]
     const msg = buildCustomerWhatsappMessage({ customer, transfers, ledgerEntries: [], now: today })
     expect(msg).toMatch(/نشاط اليوم/)
-    expect(msg).toMatch(/مسحوبة اليوم: 1/)
-    expect(msg).toMatch(/جديدة اليوم: 2/)
+    expect(msg).toMatch(/مسحوبة اليوم: 1 حوالة/)
+    expect(msg).toMatch(/جديدة اليوم: 2 حوالة/)
   })
 
   it('last settlement section shows the most recent settlement batch', () => {
@@ -314,10 +315,12 @@ describe('buildCustomerWhatsappMessage', () => {
     ]
     const msg = buildCustomerWhatsappMessage({ customer, transfers, ledgerEntries: [] })
     // Last settlement is the 2026-04-10 batch: 3 transfers, 1,500 total
-    const lastSettleMatch = msg.match(/آخر تسوية[\s\S]*?(\d+) حوالة — ([0-9,]+)/)
-    expect(lastSettleMatch).not.toBeNull()
-    expect(lastSettleMatch[1]).toBe('3')
-    expect(lastSettleMatch[2]).toBe('1,500')
+    const countMatch = msg.match(/آخر تسوية[\s\S]*?عدد الحوالات:\s*(\d+)\s*حوالة/)
+    expect(countMatch).not.toBeNull()
+    expect(countMatch[1]).toBe('3')
+    const amountMatch = msg.match(/آخر تسوية[\s\S]*?المبلغ:\s*([0-9,]+)\$/)
+    expect(amountMatch).not.toBeNull()
+    expect(amountMatch[1]).toBe('1,500')
   })
 
   it('shows last 10 recent by default, but all today if today > 10', () => {
@@ -336,8 +339,8 @@ describe('buildCustomerWhatsappMessage', () => {
       transfers.push(mkTransfer({ id: i, customerId: 600, reference: `OLD${i}`, createdAt: '2026-04-10T08:00:00.000Z' }))
     }
     const msg = buildCustomerWhatsappMessage({ customer, transfers, ledgerEntries: [], now: today })
-    // Header should say "حوالات اليوم (12)" not "آخر 10 حوالة"
-    expect(msg).toMatch(/حوالات اليوم \(12\)/)
+    // Header should say "حوالات اليوم (12 حوالة)" not "آخر 10 حوالة"
+    expect(msg).toMatch(/حوالات اليوم \(12 حوالة\)/)
     // All 12 today's refs should appear
     for (let i = 1; i <= 12; i++) {
       expect(msg).toContain(`T${i}`)

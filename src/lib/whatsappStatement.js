@@ -22,6 +22,10 @@ function formatMoney(value) {
   }
 }
 
+function formatUsd(value) {
+  return `${formatMoney(value)}$`
+}
+
 function formatDate(iso) {
   if (!iso) return ''
   try {
@@ -216,59 +220,60 @@ export function buildCustomerWhatsappMessage({
   // ── Build the message ───────────────────────────────────────────────
   const lines = []
 
-  lines.push(`السلام عليكم الأخ ${customer.name} 🙏`)
+  lines.push(`السلام عليكم الأخ ${customer.name}`)
   lines.push('')
-  lines.push('📊 كشف حسابك')
+  lines.push('كشف حسابك')
   lines.push('━━━━━━━━━━━━━━')
   lines.push('')
 
-  // Section 1 — balances
-  lines.push('💰 *الأرصدة*')
-  lines.push(`• مستحق لك الآن: *${formatMoney(owedNow)}*`)
-  lines.push(`• استلمت سابقاً: ${formatMoney(settledTotal)}`)
-  lines.push(`• إجمالي حوالاتك: ${totalTransfers}`)
+  // Section 1 — main balance
+  lines.push('*الرصيد*')
+  lines.push(`- المستحق لك الآن: *${formatUsd(owedNow)}*`)
+  lines.push(`- عدد حوالاتك الكلّي: ${totalTransfers} حوالة`)
   lines.push('')
 
-  // Section 2 — current status breakdown
+  // Section 2 — current status breakdown (count + value where relevant)
   const hasAnyStatus =
     receivedCount + withEmployeeCount + reviewHoldCount + issueCount + unsettledCount > 0
   if (hasAnyStatus) {
-    lines.push('📌 *حالة الحوالات الآن*')
+    lines.push('*حالة الحوالات الآن*')
     if (unsettledCount > 0) {
-      lines.push(`• ✅ مسحوبة وتنتظر التسوية: ${unsettledCount} حوالة (${formatMoney(unsettledTotal)})`)
+      lines.push(`- مسحوبة وتنتظر التسوية: ${unsettledCount} حوالة (بقيمة ${formatUsd(unsettledTotal)})`)
     }
     if (withEmployeeCount > 0) {
-      lines.push(`• 🔵 عند الموظف: ${withEmployeeCount}`)
+      lines.push(`- عند الموظف: ${withEmployeeCount} حوالة`)
     }
     if (receivedCount > 0) {
-      lines.push(`• 🟡 جديدة (لم تُرسل للموظف): ${receivedCount}`)
+      lines.push(`- جديدة لم تُرسل للموظف: ${receivedCount} حوالة`)
     }
     if (reviewHoldCount > 0) {
-      lines.push(`• 🟠 قيد المراجعة: ${reviewHoldCount}`)
+      lines.push(`- قيد المراجعة: ${reviewHoldCount} حوالة`)
     }
     if (issueCount > 0) {
-      lines.push(`• 🔴 فيها مشاكل غير محلولة: ${issueCount}`)
+      lines.push(`- فيها مشاكل غير محلولة: ${issueCount} حوالة`)
     }
     lines.push('')
   }
 
   // Section 3 — today's activity (only if there's anything today)
   if (pickedUpTodayCount > 0 || newTodayCount > 0) {
-    lines.push('📅 *نشاط اليوم*')
+    lines.push('*نشاط اليوم*')
     if (pickedUpTodayCount > 0) {
-      lines.push(`• مسحوبة اليوم: ${pickedUpTodayCount}`)
+      lines.push(`- مسحوبة اليوم: ${pickedUpTodayCount} حوالة`)
     }
     if (newTodayCount > 0) {
-      lines.push(`• جديدة اليوم: ${newTodayCount}`)
+      lines.push(`- جديدة اليوم: ${newTodayCount} حوالة`)
     }
     lines.push('')
   }
 
   // Section 4 — last settlement
   if (lastSettlement) {
-    lines.push('💸 *آخر تسوية*')
+    lines.push('*آخر تسوية*')
     const settlementDate = formatDate(lastSettlement.settledAt)
-    lines.push(`• ${settlementDate} — ${lastSettlement.count} حوالة — ${formatMoney(lastSettlement.total)}`)
+    lines.push(`- التاريخ: ${settlementDate}`)
+    lines.push(`- عدد الحوالات: ${lastSettlement.count} حوالة`)
+    lines.push(`- المبلغ: ${formatUsd(lastSettlement.total)}`)
     lines.push('')
   }
 
@@ -276,21 +281,21 @@ export function buildCustomerWhatsappMessage({
   if (recent.length > 0) {
     const heading =
       recentCount > MIN_RECENT_TRANSFERS
-        ? `📋 *حوالات اليوم (${recent.length})*`
-        : `📋 *آخر ${recent.length} حوالة*`
+        ? `*حوالات اليوم (${recent.length} حوالة)*`
+        : `*آخر ${recent.length} حوالة*`
     lines.push(heading)
     recent.forEach((t, index) => {
       const statusLabel = STATUS_LABELS[t.status] || t.status || ''
-      const amt = typeof t.customerAmount === 'number' ? formatMoney(t.customerAmount) : '-'
+      const amt = typeof t.customerAmount === 'number' ? formatUsd(t.customerAmount) : '-'
       const ref = t.reference || '-'
       const dateStr = formatDate(t.createdAt)
       const receiver = t.receiverName || ''
       const num = index + 1
-      const parts = [`${num}. #${ref}`]
-      if (receiver) parts.push(`→ ${receiver}`)
-      parts.push(`· ${statusLabel}`)
-      parts.push(`· ${amt}`)
-      if (dateStr) parts.push(`· ${dateStr}`)
+      const parts = [`${num}- رقم ${ref}`]
+      if (receiver) parts.push(`| المستلم: ${receiver}`)
+      parts.push(`| الحالة: ${statusLabel}`)
+      parts.push(`| المبلغ: ${amt}`)
+      if (dateStr) parts.push(`| ${dateStr}`)
       lines.push(parts.join(' '))
     })
     lines.push('')
@@ -301,8 +306,8 @@ export function buildCustomerWhatsappMessage({
 
   // Footer
   lines.push('━━━━━━━━━━━━━━')
-  lines.push(`📅 تاريخ الكشف: ${formatDate(now.toISOString())}`)
-  lines.push('شكراً لثقتك بنا 🤝')
+  lines.push(`تاريخ الكشف: ${formatDate(now.toISOString())}`)
+  lines.push('شكراً لثقتك بنا')
 
   return lines.join('\n')
 }
