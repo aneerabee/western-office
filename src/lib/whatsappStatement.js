@@ -44,12 +44,35 @@ const STATUS_LABELS = {
 }
 
 /**
- * Normalize a user-entered phone number to digits-only (wa.me format).
- * Returns empty string when the input cannot be normalized.
+ * Normalize a user-entered phone number to wa.me format (pure digits,
+ * international without any leading + or 00).
+ *
+ * Handles three common input shapes the user may type:
+ *   1. International with +   (e.g. "+90 555 123 4567")
+ *   2. International with 00  (e.g. "0090 555 123 4567")
+ *   3. Local Turkish with 0   (e.g. "0555 123 4567" — 11 digits)
+ *
+ * Returns an empty string if the input cannot be normalized.
+ * Default country code is Turkey (90) since the office operates there.
  */
+const DEFAULT_COUNTRY_CODE = '90'
+
 export function normalizePhoneForWhatsapp(raw) {
   if (typeof raw !== 'string') return ''
-  const digits = raw.replace(/[^0-9]/g, '')
+  let digits = raw.replace(/[^0-9]/g, '')
+  if (!digits) return ''
+
+  // Case 2: strip '00' international call prefix → "0090..." becomes "90..."
+  if (digits.startsWith('00')) {
+    digits = digits.slice(2)
+  } else if (digits.startsWith('0') && digits.length === 11) {
+    // Case 3: Turkish local "0 5xx xxx xx xx" → prepend country code
+    digits = DEFAULT_COUNTRY_CODE + digits.slice(1)
+  }
+
+  // Final sanity: must be at least 10 digits (shortest viable country + number)
+  if (digits.length < 10) return ''
+
   return digits
 }
 

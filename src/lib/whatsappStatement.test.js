@@ -54,9 +54,23 @@ function mkTransfer(overrides = {}) {
 }
 
 describe('normalizePhoneForWhatsapp', () => {
-  it('strips spaces, plus, dashes, parentheses', () => {
+  it('handles international + prefix', () => {
     expect(normalizePhoneForWhatsapp('+90 555 123 45 67')).toBe('905551234567')
-    expect(normalizePhoneForWhatsapp('(0090) 555-123-4567')).toBe('00905551234567')
+    expect(normalizePhoneForWhatsapp('+9 05 55 12 34 567')).toBe('905551234567')
+  })
+
+  it('strips 00 international call prefix', () => {
+    expect(normalizePhoneForWhatsapp('(0090) 555-123-4567')).toBe('905551234567')
+    expect(normalizePhoneForWhatsapp('00 90 555 123 4567')).toBe('905551234567')
+  })
+
+  it('converts local Turkish 0 5xx format to +90', () => {
+    expect(normalizePhoneForWhatsapp('0555 123 45 67')).toBe('905551234567')
+    expect(normalizePhoneForWhatsapp('05551234567')).toBe('905551234567')
+  })
+
+  it('keeps already-international numbers intact', () => {
+    expect(normalizePhoneForWhatsapp('905551234567')).toBe('905551234567')
   })
 
   it('returns empty string for invalid input', () => {
@@ -66,8 +80,9 @@ describe('normalizePhoneForWhatsapp', () => {
     expect(normalizePhoneForWhatsapp(123)).toBe('')
   })
 
-  it('keeps only digits', () => {
-    expect(normalizePhoneForWhatsapp('abc123def456')).toBe('123456')
+  it('rejects numbers that are too short after normalization', () => {
+    expect(normalizePhoneForWhatsapp('abc123def456')).toBe('')
+    expect(normalizePhoneForWhatsapp('12345')).toBe('')
   })
 })
 
