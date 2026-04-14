@@ -19,6 +19,8 @@ import {
   transitionTransfer,
   validateTransition,
   updateAmount,
+  updateTransferField,
+  isTransferLocked,
 } from './transferLogic'
 import {
   buildCustomerStatement,
@@ -840,5 +842,97 @@ describe('الهجرة والنسخ الاحتياطي', () => {
     expect(() => parseAppStateBackup('not json')).toThrow()
     expect(() => parseAppStateBackup('{}')).toThrow()
     expect(() => parseAppStateBackup('{"customers":[]}')).toThrow()
+  })
+})
+
+describe('قفل الحوالات المسوّاة', () => {
+  it('isTransferLocked يرجع true للحوالات المسوّاة فقط', () => {
+    expect(isTransferLocked({ settled: true })).toBe(true)
+    expect(isTransferLocked({ settled: false })).toBe(false)
+    expect(isTransferLocked({})).toBe(false)
+    expect(isTransferLocked(null)).toBe(false)
+    expect(isTransferLocked(undefined)).toBe(false)
+  })
+
+  it('updateAmount لا يعدّل المبالغ في حوالة مسوّاة', () => {
+    const settled = makeTx({
+      id: 901,
+      status: 'picked_up',
+      settled: true,
+      settledAt: '2026-04-13T10:00:00.000Z',
+      transferAmount: 500,
+      customerAmount: 480,
+      systemAmount: 490,
+      margin: 10,
+    })
+    const result1 = updateAmount(settled, 'customerAmount', 999)
+    expect(result1).toBe(settled) // exact same reference — no mutation
+    expect(result1.customerAmount).toBe(480)
+
+    const result2 = updateAmount(settled, 'systemAmount', 999)
+    expect(result2).toBe(settled)
+    expect(result2.systemAmount).toBe(490)
+
+    const result3 = updateAmount(settled, 'transferAmount', 999)
+    expect(result3).toBe(settled)
+    expect(result3.transferAmount).toBe(500)
+  })
+
+  it('updateAmount يعمل طبيعياً على حوالة غير مسوّاة', () => {
+    const unsettled = makeTx({
+      id: 902,
+      status: 'picked_up',
+      settled: false,
+      customerAmount: 480,
+      systemAmount: 490,
+    })
+    const next = updateAmount(unsettled, 'customerAmount', 450)
+    expect(next).not.toBe(unsettled)
+    expect(next.customerAmount).toBe(450)
+  })
+
+  it('updateTransferField يرفض تغيير customerId في حوالة مسوّاة', () => {
+    const settled = makeTx({
+      id: 903,
+      customerId: 201,
+      status: 'picked_up',
+      settled: true,
+      settledAt: '2026-04-13T10:00:00.000Z',
+    })
+    const result = updateTransferField(settled, 'customerId', 999)
+    expect(result).toBe(settled)
+    expect(result.customerId).toBe(201)
+  })
+
+  it('updateTransferField يرفض تعديل أي حقل في حوالة مسوّاة', () => {
+    const settled = makeTx({
+      id: 904,
+      reference: 'ORIG-REF',
+      senderName: 'فلان',
+      status: 'picked_up',
+      settled: true,
+    })
+    const a = updateTransferField(settled, 'reference', 'NEW-REF')
+    expect(a).toBe(settled)
+    expect(a.reference).toBe('ORIG-REF')
+
+    const b = updateTransferField(settled, 'senderName', 'شخص آخر')
+    expect(b).toBe(settled)
+    expect(b.senderName).toBe('فلان')
+
+    const c = updateTransferField(settled, 'note', 'ملاحظة')
+    expect(c).toBe(settled)
+  })
+
+  it('updateTransferField يعمل طبيعياً على حوالة غير مسوّاة', () => {
+    const unsettled = makeTx({
+      id: 905,
+      customerId: 100,
+      status: 'received',
+      settled: false,
+    })
+    const next = updateTransferField(unsettled, 'customerId', 200)
+    expect(next).not.toBe(unsettled)
+    expect(next.customerId).toBe(200)
   })
 })

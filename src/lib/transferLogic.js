@@ -343,7 +343,20 @@ export function transitionTransfer(item, nextStatus) {
 
 /* ── Field updates ── */
 
+/*
+  A settled transfer is LOCKED: its amounts, customer and identifying
+  fields must not change without first un-settling (via the reset flow).
+  updateAmount/updateTransferField refuse to apply changes on such items.
+  This is a safety net — the UI already hides the edit controls, but a
+  library-level guard protects against any future regression that would
+  silently corrupt the settlement history or profit claims.
+*/
+export function isTransferLocked(item) {
+  return Boolean(item && item.settled === true)
+}
+
 export function updateAmount(item, field, value) {
+  if (isTransferLocked(item)) return item
   const parsed = value === '' ? null : Number(value)
   if (Number.isNaN(parsed)) return item
 
@@ -360,6 +373,7 @@ export function updateAmount(item, field, value) {
 }
 
 export function updateTransferField(item, field, value) {
+  if (isTransferLocked(item)) return item
   const oldValue = item[field]
   if (field === 'customerId') {
     return {

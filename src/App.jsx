@@ -536,6 +536,10 @@ function App() {
     if (blockIfReadOnly()) return false
     const transfer = transfers.find((t) => t.id === id)
     if (!transfer) return false
+    if (transfer.settled) {
+      setFeedback('لا يمكن حذف حوالة مسوّاة — تؤثر على قيود المحاسبة ومطالبات الربح.')
+      return false
+    }
     if (transfer.status === 'picked_up') {
       setFeedback('لا يمكن حذف حوالة تم سحبها لأنها تؤثر على الأرصدة والحسابات.')
       return false
