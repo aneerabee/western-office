@@ -282,6 +282,32 @@ describe('buildCustomerWhatsappMessage', () => {
     expect(msg).toMatch(/مسحوبة وتنتظر التسوية: 2 حوالة \(بقيمة 800\$\)/)
   })
 
+  it('lists every unresolved issue with reference and sender name', () => {
+    const customer = mkCustomer({ id: 350 })
+    const transfers = [
+      mkTransfer({ id: 1, customerId: 350, reference: 'ISS-1', senderName: 'أحمد', status: 'issue' }),
+      mkTransfer({ id: 2, customerId: 350, reference: 'ISS-2', senderName: 'محمد', status: 'issue' }),
+      mkTransfer({ id: 3, customerId: 350, reference: 'HAPPY', senderName: 'خالد', status: 'picked_up', settled: false, customerAmount: 500 }),
+    ]
+    const msg = buildCustomerWhatsappMessage({ customer, transfers, ledgerEntries: [] })
+    // Count line
+    expect(msg).toMatch(/فيها مشاكل غير محلولة: 2 حوالة/)
+    // Each issue line present with ref + sender
+    expect(msg).toMatch(/رقم ISS-1\s+·\s+المرسل: أحمد/)
+    expect(msg).toMatch(/رقم ISS-2\s+·\s+المرسل: محمد/)
+    // The non-issue transfer must NOT appear as an issue line
+    expect(msg).not.toContain('رقم HAPPY  ·  المرسل: خالد')
+  })
+
+  it('issue detail lines use "—" for missing sender name', () => {
+    const customer = mkCustomer({ id: 360 })
+    const transfers = [
+      mkTransfer({ id: 1, customerId: 360, reference: 'NO-SENDER', senderName: '', status: 'issue' }),
+    ]
+    const msg = buildCustomerWhatsappMessage({ customer, transfers, ledgerEntries: [] })
+    expect(msg).toMatch(/رقم NO-SENDER\s+·\s+المرسل: —/)
+  })
+
   it('today section lists new today transfers + a status summary', () => {
     const customer = mkCustomer({ id: 400 })
     const today = new Date('2026-04-13T12:00:00.000Z')

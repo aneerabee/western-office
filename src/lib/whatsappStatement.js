@@ -153,12 +153,16 @@ export function buildCustomerWhatsappMessage({
   let issueCount = 0            // unresolved problems
   let unsettledCount = 0        // picked up by customer but not paid out yet
   let unsettledTotal = 0        // sum of customerAmount for unsettledCount
+  const issueTransfers = []     // detailed list for the issues section
 
   for (const t of activeTransfers) {
     if (t.status === 'received') receivedCount += 1
     else if (t.status === 'with_employee') withEmployeeCount += 1
     else if (t.status === 'review_hold') reviewHoldCount += 1
-    else if (t.status === 'issue') issueCount += 1
+    else if (t.status === 'issue') {
+      issueCount += 1
+      issueTransfers.push(t)
+    }
     else if (t.status === 'picked_up' && !t.settled) {
       unsettledCount += 1
       unsettledTotal += Number(t.customerAmount) || 0
@@ -266,6 +270,14 @@ export function buildCustomerWhatsappMessage({
     }
     if (issueCount > 0) {
       lines.push(`- فيها مشاكل غير محلولة: ${issueCount} حوالة`)
+      // Detailed list so the customer knows EXACTLY which references are
+      // stuck. Indented with a "·" bullet so it reads as a sub-item under
+      // the issues count line, and each field is separated by " · " too.
+      for (const t of issueTransfers) {
+        const ref = t.reference || '-'
+        const sender = (t.senderName || '').trim() || '—'
+        lines.push(`   · رقم ${ref}  ·  المرسل: ${sender}`)
+      }
     }
     lines.push('')
   }
