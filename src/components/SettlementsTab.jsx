@@ -146,7 +146,7 @@ export default function SettlementsTab({
             className={`settle-sub-tab ${view === 'pending' ? 'settle-sub-tab--active' : ''}`}
             onClick={() => setView('pending')}
           >
-            بانتظار التسوية
+            للتسوية
             {groups.length > 0 ? <span className="settle-sub-tab-count">{groups.length}</span> : null}
           </button>
           <button
@@ -154,7 +154,7 @@ export default function SettlementsTab({
             className={`settle-sub-tab ${view === 'history' ? 'settle-sub-tab--active' : ''}`}
             onClick={() => setView('history')}
           >
-            السجل المسوّى
+            تمت التسوية
             {settlementHistory.length > 0 ? (
               <span className="settle-sub-tab-count">{settlementHistory.length}</span>
             ) : null}
