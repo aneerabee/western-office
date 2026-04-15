@@ -4384,7 +4384,7 @@ tbody tr:hover {
     clip: rect(0 0 0 0);
   }
   .tc-sender, .tc-receiver {
-    font-size: 0.8rem;
+    font-size: 0.68rem;
     font-weight: 700;
     white-space: nowrap;
     overflow: hidden;
@@ -4392,8 +4392,11 @@ tbody tr:hover {
     min-width: 0;
     max-width: 45%;
     flex: 1 1 auto;
+    direction: ltr;
+    unicode-bidi: plaintext;
+    text-align: start;
   }
-  .tc-arrow { font-size: 0.9rem; flex: 0 0 auto; }
+  .tc-arrow { font-size: 0.85rem; flex: 0 0 auto; }
 
   /* ref-block: صغير ومكوّن */
   .tc-ref-block { min-width: 0; flex: 0 0 auto; }
@@ -4612,8 +4615,8 @@ tbody tr:hover {
   .tc-row--amounts { gap: 4px; }
   .tc-amount-chip, .amount-chip { padding: 2px 6px; font-size: 0.72rem; }
   .tc-status-pill { padding: 2px 6px; font-size: 0.66rem; }
-  .tc-flow { font-size: 0.76rem; padding: 2px 5px; }
-  .tc-sender, .tc-receiver { font-size: 0.76rem; }
+  .tc-flow { font-size: 0.66rem; padding: 2px 5px; }
+  .tc-sender, .tc-receiver { font-size: 0.64rem; }
 
   /* People — أقصى ضغط للأعمدة */
   .people-table th, .people-table td {
