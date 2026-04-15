@@ -4478,15 +4478,20 @@ tbody tr:hover {
   }
   .people-table .num-col { width: auto !important; padding: 5px 2px !important; }
   .people-table .action-col { width: auto !important; padding: 5px 2px !important; }
-  .people-table .person-name-cell { padding: 5px 3px !important; }
+  .people-table .person-name-cell {
+    padding: 5px 3px !important;
+    width: 100%;
+    white-space: normal;
+    word-break: break-word;
+  }
   .people-table .person-name-text {
     padding: 1px 4px !important;
     font-size: 0.75rem !important;
-    max-width: 110px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    display: inline-block;
-    vertical-align: middle;
+    display: inline;
+    white-space: normal;
+    word-break: break-word;
+    overflow: visible;
+    max-width: none;
   }
   .people-edit-input { width: 38px !important; font-size: 0.72rem !important; padding: 3px 2px !important; }
   .people-toolbar {
@@ -4615,7 +4620,7 @@ tbody tr:hover {
     padding: 4px 2px !important;
     font-size: 0.68rem !important;
   }
-  .people-table .person-name-text { max-width: 90px; font-size: 0.72rem !important; }
+  .people-table .person-name-text { max-width: none; font-size: 0.72rem !important; white-space: normal; word-break: break-word; }
   .people-edit-input { width: 32px !important; font-size: 0.68rem !important; }
 
   /* Customer cards */
