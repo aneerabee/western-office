@@ -46,8 +46,10 @@ import DailyClosingTab from './components/DailyClosingTab'
 import IssuesTab from './components/IssuesTab'
 import TrashTab from './components/TrashTab'
 import PeopleTab from './components/PeopleTab'
+import PublicTurkishReceivers from './components/PublicTurkishReceivers'
 import StatsHero from './components/StatsHero'
 import {
+  buildPeopleList,
   buildReceiverColorMap,
   deletePersonOverride,
   findDuplicateReferences,
@@ -111,12 +113,21 @@ function detectViewerCustomerId() {
   return parseViewerCustomerId(window.location.search)
 }
 
+function detectPublicListMode() {
+  if (typeof window === 'undefined') return null
+  const params = new URLSearchParams(window.location.search)
+  const value = params.get('list')
+  return value === 'turkish-receivers' ? 'turkish-receivers' : null
+}
+
 function App() {
   // Viewer mode is detected ONCE at mount and never changes during the
   // session. It guarantees this entire tab is treated as read-only and
   // scoped to one customer.
   const [viewerCustomerId] = useState(detectViewerCustomerId)
   const isViewerMode = viewerCustomerId != null
+  const [publicListMode] = useState(detectPublicListMode)
+  const isPublicList = publicListMode != null
 
   const importRef = useRef(null)
   const [activeTab, setActiveTab] = useState(() => {
@@ -1057,6 +1068,16 @@ function App() {
           🚫 هذا الرابط غير صالح — الزبون غير موجود أو تم حذفه. تواصل مع المكتب للحصول على رابط جديد.
         </div>
       </div>
+    )
+  }
+
+  // Public list mode: render minimal Turkish receivers list, no app shell
+  if (isPublicList && publicListMode === 'turkish-receivers') {
+    return (
+      <PublicTurkishReceivers
+        transfers={transfers}
+        receivers={receivers}
+      />
     )
   }
 
