@@ -46,6 +46,13 @@ const STATUS_ICONS = {
   issue: '⚠',
 }
 
+const SORT_LABELS = {
+  smart: 'ترتيب ذكي',
+  latest: 'الأحدث',
+  oldest: 'الأقدم',
+  customer: 'الزبون',
+}
+
 function CustomerPicker({ customers, value, onChange, placeholder }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -197,6 +204,17 @@ export default function TransfersTab({
   const showSettledMatchesSection = viewMode === 'active' && settledTransfers.length > 0 && searchTerm.trim() !== ''
   const showSettledArchiveSection = viewMode === 'active' && settledTransfers.length > 0 && searchTerm.trim() === ''
   const isSettledSectionOpen = showSettledMatchesSection ? true : settledOpen
+  const totalVisibleMatches = filteredTransfers.length + (showSettledMatchesSection ? settledTransfers.length : 0)
+  const activeFilterChips = []
+  if (searchTerm.trim()) activeFilterChips.push(`بحث: ${searchTerm.trim()}`)
+  if (viewMode !== 'active') activeFilterChips.push(`عرض: ${VIEW_LABELS[viewMode]}`)
+  if (statusFilter !== FILTER_ALL) activeFilterChips.push(`حالة: ${statusMeta[statusFilter]?.label || statusFilter}`)
+  if (customerFilter !== FILTER_ALL) {
+    activeFilterChips.push(`زبون: ${customersById.get(Number(customerFilter))?.name || customerFilter}`)
+  }
+  if (sortMode !== 'smart') activeFilterChips.push(`ترتيب: ${SORT_LABELS[sortMode] || sortMode}`)
+  if (dateFrom) activeFilterChips.push(`من: ${dateFrom}`)
+  if (dateTo) activeFilterChips.push(`إلى: ${dateTo}`)
 
   // Smart grouped view
   const sections = sortMode === 'smart' ? groupBySections(filteredTransfers) : null
@@ -376,6 +394,23 @@ export default function TransfersTab({
           </form>
           </>
         )}
+      </section>
+
+      <section className="panel search-panel">
+        <div className="search-panel__head">
+          <div className="search-panel__title">
+            <span className="search-panel__badge">⌕</span>
+            <h2>بحث ومتابعة الحوالات</h2>
+          </div>
+          <div className="search-panel__summary">
+            <span className="search-panel__results">
+              {totalVisibleMatches} نتيجة ظاهرة
+            </span>
+            <span className="search-panel__hint">
+              ابحث سريعًا ثم صفِّ النتائج حسب الحالة أو الزبون أو التاريخ
+            </span>
+          </div>
+        </div>
 
         <div className="transfer-search-bar">
           <div className="transfer-search-bar__input">
@@ -438,7 +473,15 @@ export default function TransfersTab({
             </select>
             <input type="date" className="filter-date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
             <input type="date" className="filter-date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
-            <button className="ghost-button ghost-button--muted" onClick={onResetFilters}>تصفير</button>
+            <button className="ghost-button ghost-button--muted search-panel__reset" onClick={onResetFilters}>تصفير كل الفلاتر</button>
+          </div>
+        ) : null}
+
+        {activeFilterChips.length > 0 ? (
+          <div className="search-panel__chips">
+            {activeFilterChips.map((chip) => (
+              <span key={chip} className="search-panel__chip">{chip}</span>
+            ))}
           </div>
         ) : null}
       </section>
