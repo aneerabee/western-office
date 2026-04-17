@@ -3,7 +3,9 @@ import { statusMeta } from '../sampleData'
 import {
   FILTER_ALL,
   createEmptyTransferBatchRow,
+  filterTransfers,
   statusOrder,
+  sortTransfers,
   transitionTransfer,
   validateTransition,
   updateAmount,
@@ -166,10 +168,35 @@ export default function TransfersTab({
     [allTransfers, receivers],
   )
 
-  // Settled transfers for the separate section
-  const settledTransfers = allTransfers
-    .filter((t) => t.status === 'picked_up' && t.settled)
-    .sort((a, b) => new Date(b.settledAt || b.updatedAt).getTime() - new Date(a.settledAt || a.updatedAt).getTime())
+  const settledTransfers = useMemo(() => {
+    const completedFilters = {
+      searchTerm,
+      statusFilter,
+      viewMode: 'completed',
+      customerFilter,
+      dateFrom,
+      dateTo,
+    }
+
+    return sortTransfers(
+      filterTransfers(allTransfers, completedFilters, customersById),
+      sortMode === 'smart' ? 'latest' : sortMode,
+      customersById,
+    )
+  }, [
+    allTransfers,
+    customerFilter,
+    customersById,
+    dateFrom,
+    dateTo,
+    searchTerm,
+    sortMode,
+    statusFilter,
+  ])
+
+  const showSettledMatchesSection = viewMode === 'active' && settledTransfers.length > 0 && searchTerm.trim() !== ''
+  const showSettledArchiveSection = viewMode === 'active' && settledTransfers.length > 0 && searchTerm.trim() === ''
+  const isSettledSectionOpen = showSettledMatchesSection ? true : settledOpen
 
   // Smart grouped view
   const sections = sortMode === 'smart' ? groupBySections(filteredTransfers) : null
@@ -431,7 +458,11 @@ export default function TransfersTab({
 
         {filteredTransfers.length === 0 ? (
           <div className="empty-state">
-            {viewMode === 'active' ? 'لا توجد حوالات نشطة حالياً' : 'لا توجد نتائج'}
+            {viewMode === 'active'
+              ? (showSettledMatchesSection
+                  ? 'لا توجد حوالات نشطة مطابقة، وتوجد حوالات مسوّاة مطابقة في الأسفل.'
+                  : 'لا توجد حوالات نشطة حالياً')
+              : 'لا توجد نتائج'}
           </div>
         ) : sections ? (
           sections.map((section) => {
@@ -487,7 +518,7 @@ export default function TransfersTab({
       </section>
 
       {/* ── Settled transfers section ── */}
-      {viewMode === 'active' && settledTransfers.length > 0 ? (
+      {showSettledMatchesSection || showSettledArchiveSection ? (
         <section className="panel settled-panel">
           <div className="panel-head">
             <button
@@ -495,14 +526,14 @@ export default function TransfersTab({
               onClick={() => setSettledOpen((v) => !v)}
             >
               <h2>
-                حوالات مسوّاة
+                {showSettledMatchesSection ? 'حوالات مسوّاة مطابقة للبحث' : 'حوالات مسوّاة'}
                 <span className="panel-count">{settledTransfers.length}</span>
-                <span className="toggle-arrow">{settledOpen ? '▲' : '▼'}</span>
+                <span className="toggle-arrow">{isSettledSectionOpen ? '▲' : '▼'}</span>
               </h2>
             </button>
           </div>
 
-          {settledOpen ? (
+          {isSettledSectionOpen ? (
             <div className="transfer-card-list transfer-card-list--settled">
               {settledTransfers.map((t) => {
                 const settledRefKey = String(t.reference || '').trim().toUpperCase()
