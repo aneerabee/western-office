@@ -519,6 +519,7 @@ export default function CustomersTab({
                             const isDupRef = duplicateReferences && refKey && duplicateReferences.has(refKey)
                             const receiverPreview = lookupReceiverColor(receiverColorMap, t.receiverName)
                             const receiverClass = getReceiverColorClass(receiverPreview.colorLevel)
+                            const isFinanciallyLocked = Boolean(t.settled)
                             const rowClass = [
                               isDupRef ? 'row-duplicate-ref' : '',
                               t.status === 'issue' ? 'row-issue'
@@ -552,40 +553,60 @@ export default function CustomersTab({
                                 </span>
                               </td>
                               <td>
-                                <StatusActions item={t} onTransition={safeTransition} />
+                                {isFinanciallyLocked ? (
+                                  <span className="status-done-badge status-done-badge--xs">مقفلة ماليًا</span>
+                                ) : (
+                                  <StatusActions item={t} onTransition={safeTransition} />
+                                )}
                               </td>
                               <td className="amount-info">
                                 {t.transferAmount === null ? '-' : formatMoney(t.transferAmount)}
                               </td>
                               <td>
-                                <input
-                                  className="table-input table-input--sm money-input"
-                                  inputMode="decimal"
-                                  value={formatEditableNumber(t.customerAmount ?? '')}
-                                  onChange={(e) =>
-                                    onPatchTransfer(t.id, (r) => updateAmount(r, 'customerAmount', normalizeNumberInput(e.target.value)))
-                                  }
-                                />
+                                {isFinanciallyLocked ? (
+                                  <span className="amount-info">
+                                    {t.customerAmount === null ? '-' : formatMoney(t.customerAmount)}
+                                  </span>
+                                ) : (
+                                  <input
+                                    className="table-input table-input--sm money-input"
+                                    inputMode="decimal"
+                                    value={formatEditableNumber(t.customerAmount ?? '')}
+                                    onChange={(e) =>
+                                      onPatchTransfer(t.id, (r) => updateAmount(r, 'customerAmount', normalizeNumberInput(e.target.value)))
+                                    }
+                                  />
+                                )}
                               </td>
                               <td>
-                                <input
-                                  className="table-input table-input--sm money-input"
-                                  inputMode="decimal"
-                                  value={formatEditableNumber(t.systemAmount ?? '')}
-                                  onChange={(e) =>
-                                    onPatchTransfer(t.id, (r) => updateAmount(r, 'systemAmount', normalizeNumberInput(e.target.value)))
-                                  }
-                                />
+                                {isFinanciallyLocked ? (
+                                  <span className="amount-info">
+                                    {t.systemAmount === null ? '-' : formatMoney(t.systemAmount)}
+                                  </span>
+                                ) : (
+                                  <input
+                                    className="table-input table-input--sm money-input"
+                                    inputMode="decimal"
+                                    value={formatEditableNumber(t.systemAmount ?? '')}
+                                    onChange={(e) =>
+                                      onPatchTransfer(t.id, (r) => updateAmount(r, 'systemAmount', normalizeNumberInput(e.target.value)))
+                                    }
+                                  />
+                                )}
                               </td>
                               <td>{t.margin === null ? '-' : formatMoney(t.margin)}</td>
                               <td>
-                                <input
-                                  className="table-input table-input--sm"
-                                  value={t.note || ''}
-                                  onChange={(e) =>
-                                    onPatchTransfer(t.id, (r) => updateTransferField(r, 'note', e.target.value))
-                                  }
-                                />
+                                {isFinanciallyLocked ? (
+                                  <span className="text-muted">{t.note || '-'}</span>
+                                ) : (
+                                  <input
+                                    className="table-input table-input--sm"
+                                    value={t.note || ''}
+                                    onChange={(e) =>
+                                      onPatchTransfer(t.id, (r) => updateTransferField(r, 'note', e.target.value))
+                                    }
+                                  />
+                                )}
                               </td>
                             </tr>
                             )

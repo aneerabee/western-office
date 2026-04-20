@@ -3628,6 +3628,9 @@ tbody tr:hover {
 .transfer-card-list--settled .transfer-card .tc-actions {
   display: none; /* no actions on settled — just display */
 }
+.transfer-card-list--settled .transfer-card .tc-actions--settled-visible {
+  display: flex;
+}
 
 /* Responsive */
 @media (max-width: 900px) {

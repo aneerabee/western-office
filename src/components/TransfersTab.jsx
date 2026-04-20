@@ -587,6 +587,7 @@ export default function TransfersTab({
           {isSettledSectionOpen ? (
             <div className="transfer-card-list transfer-card-list--settled">
               {settledTransfers.map((t) => {
+                const isEditingSettled = editingId === t.id
                 const settledRefKey = String(t.reference || '').trim().toUpperCase()
                 const settledIsDup = duplicateReferences && settledRefKey && duplicateReferences.has(settledRefKey)
                 const settledReceiverPreview = lookupReceiverColor(receiverColorMap, t.receiverName)
@@ -651,6 +652,52 @@ export default function TransfersTab({
                           <span className="tc-note-text">{t.note}</span>
                         </div>
                       ) : null}
+                      {isEditingSettled ? (
+                        <div className="tc-edit-form">
+                          <div className="tc-note">
+                            <span className="tc-note-icon" aria-hidden="true">🔒</span>
+                            <span className="tc-note-text">هذه الحوالة مسوّاة، لذلك المسموح فقط تعديل رقم الحوالة واسم المرسل واسم المستلم.</span>
+                          </div>
+                          <div className="tc-edit-grid">
+                            <label className="tc-field">
+                              <span>رقم الحوالة</span>
+                              <input
+                                className="tc-input"
+                                value={t.reference}
+                                onChange={(e) =>
+                                  onPatchTransfer(t.id, (r) => updateTransferField(r, 'reference', e.target.value.toUpperCase()))
+                                }
+                              />
+                            </label>
+                            <label className="tc-field">
+                              <span>المرسل</span>
+                              <input
+                                list="sender-name-suggestions"
+                                className="tc-input"
+                                value={t.senderName || ''}
+                                onChange={(e) =>
+                                  onPatchTransfer(t.id, (r) => updateTransferField(r, 'senderName', e.target.value))
+                                }
+                              />
+                            </label>
+                            <label className="tc-field">
+                              <span>المستلم</span>
+                              <input
+                                list="receiver-name-suggestions"
+                                className="tc-input"
+                                value={t.receiverName || ''}
+                                onChange={(e) =>
+                                  onPatchTransfer(t.id, (r) => updateTransferField(r, 'receiverName', e.target.value))
+                                }
+                              />
+                            </label>
+                            <div className="tc-field tc-field--readonly">
+                              <span>الحالة</span>
+                              <div className="tc-readonly-value">تمت التسوية بالكامل</div>
+                            </div>
+                          </div>
+                        </div>
+                      ) : null}
                       <div className="tc-settled-meta">
                         <span className="tc-settled-meta__badge">
                           <span className="tc-settled-meta__dot" aria-hidden="true" />
@@ -661,6 +708,33 @@ export default function TransfersTab({
                         </span>
                       </div>
                     </div>
+                    {readOnly ? null : (
+                      <div className="tc-actions tc-actions--settled-visible">
+                        {!isEditingSettled ? (
+                          <button
+                            className="tc-btn tc-btn--edit"
+                            onClick={() => setEditingId(t.id)}
+                          >
+                            تصحيح البيانات
+                          </button>
+                        ) : (
+                          <>
+                            <button
+                              className="tc-btn tc-btn--save"
+                              onClick={() => setEditingId(null)}
+                            >
+                              حفظ
+                            </button>
+                            <button
+                              className="tc-btn tc-btn--ghost"
+                              onClick={() => setEditingId(null)}
+                            >
+                              إغلاق
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    )}
                   </article>
                 )
               })}
@@ -809,6 +883,7 @@ function TransferTable({
       {items.map((item) => {
         const isEditing = editingId === item.id
         const isPickupFlow = pickupFlowId === item.id
+        const isFinanciallyLocked = Boolean(item.settled)
         const refKey = String(item.reference || '').trim().toUpperCase()
         const isDuplicateRef = duplicateReferences && refKey && duplicateReferences.has(refKey)
         const receiverPreview = lookupReceiverColor(receiverColorMap, item.receiverName)
@@ -913,6 +988,12 @@ function TransferTable({
 
               {isEditing ? (
                 <div className="tc-edit-form">
+                  {isFinanciallyLocked ? (
+                    <div className="tc-note">
+                      <span className="tc-note-icon" aria-hidden="true">🔒</span>
+                      <span className="tc-note-text">هذه الحوالة تمت تسويتها، لذلك المسموح فقط تعديل رقم الحوالة واسم المرسل واسم المستلم.</span>
+                    </div>
+                  ) : null}
                   <div className="tc-edit-grid">
                     <label className="tc-field">
                       <span>رقم الحوالة</span>
@@ -926,18 +1007,24 @@ function TransferTable({
                     </label>
                     <label className="tc-field">
                       <span>الزبون</span>
-                      <select
-                        className="tc-input"
-                        value={customers.some((c) => c.id === item.customerId) ? item.customerId : ''}
-                        onChange={(e) =>
-                          onPatchTransfer(item.id, (r) => updateTransferField(r, 'customerId', Number(e.target.value)))
-                        }
-                      >
-                        <option value="" disabled>اختر زبوناً</option>
-                        {customers.map((c) => (
-                          <option key={c.id} value={c.id}>{c.name}</option>
-                        ))}
-                      </select>
+                      {isFinanciallyLocked ? (
+                        <div className="tc-readonly-value">
+                          {customer?.name || '—'}
+                        </div>
+                      ) : (
+                        <select
+                          className="tc-input"
+                          value={customers.some((c) => c.id === item.customerId) ? item.customerId : ''}
+                          onChange={(e) =>
+                            onPatchTransfer(item.id, (r) => updateTransferField(r, 'customerId', Number(e.target.value)))
+                          }
+                        >
+                          <option value="" disabled>اختر زبوناً</option>
+                          {customers.map((c) => (
+                            <option key={c.id} value={c.id}>{c.name}</option>
+                          ))}
+                        </select>
+                      )}
                     </label>
                     <label className="tc-field">
                       <span>المرسل</span>
@@ -963,36 +1050,54 @@ function TransferTable({
                     </label>
                     <label className="tc-field">
                       <span>الحوالة</span>
-                      <input
-                        className="tc-input money-input"
-                        inputMode="decimal"
-                        value={formatEditableNumber(item.transferAmount ?? '')}
-                        onChange={(e) =>
-                          onPatchTransfer(item.id, (r) => updateAmount(r, 'transferAmount', normalizeNumberInput(e.target.value)))
-                        }
-                      />
+                      {isFinanciallyLocked ? (
+                        <div className="tc-readonly-value">
+                          {item.transferAmount == null ? '—' : formatMoney(item.transferAmount)}
+                        </div>
+                      ) : (
+                        <input
+                          className="tc-input money-input"
+                          inputMode="decimal"
+                          value={formatEditableNumber(item.transferAmount ?? '')}
+                          onChange={(e) =>
+                            onPatchTransfer(item.id, (r) => updateAmount(r, 'transferAmount', normalizeNumberInput(e.target.value)))
+                          }
+                        />
+                      )}
                     </label>
                     <label className="tc-field">
                       <span>للزبون</span>
-                      <input
-                        className="tc-input money-input"
-                        inputMode="decimal"
-                        value={formatEditableNumber(item.customerAmount ?? '')}
-                        onChange={(e) =>
-                          onPatchTransfer(item.id, (r) => updateAmount(r, 'customerAmount', normalizeNumberInput(e.target.value)))
-                        }
-                      />
+                      {isFinanciallyLocked ? (
+                        <div className="tc-readonly-value">
+                          {item.customerAmount == null ? '—' : formatMoney(item.customerAmount)}
+                        </div>
+                      ) : (
+                        <input
+                          className="tc-input money-input"
+                          inputMode="decimal"
+                          value={formatEditableNumber(item.customerAmount ?? '')}
+                          onChange={(e) =>
+                            onPatchTransfer(item.id, (r) => updateAmount(r, 'customerAmount', normalizeNumberInput(e.target.value)))
+                          }
+                        />
+                      )}
                     </label>
                     <label className="tc-field">
                       <span>من الموظف</span>
-                      <input
-                        className="tc-input money-input"
-                        inputMode="decimal"
-                        value={formatEditableNumber(item.systemAmount ?? '')}
-                        onChange={(e) =>
-                          onPatchTransfer(item.id, (r) => updateAmount(r, 'systemAmount', normalizeNumberInput(e.target.value)))
-                        }
-                      />
+                      {isFinanciallyLocked ? (
+                        <div className="tc-readonly-value">
+                          {item.systemAmount == null ? '—' : formatMoney(item.systemAmount)}
+                        </div>
+                      ) : (
+                        <input
+                          className="tc-input money-input"
+                          inputMode="decimal"
+                          value={formatEditableNumber(item.systemAmount ?? '')}
+                          onChange={(e) =>
+                            onPatchTransfer(item.id, (r) => updateAmount(r, 'systemAmount', normalizeNumberInput(e.target.value)))
+                          }
+                        />
+                      )}
                     </label>
                     <div className="tc-field tc-field--readonly">
                       <span>الربح</span>
@@ -1002,18 +1107,28 @@ function TransferTable({
                     </div>
                     <label className="tc-field tc-field--full">
                       <span>ملاحظة</span>
-                      <input
-                        className="tc-input"
-                        value={item.note || ''}
-                        placeholder="اكتب ملاحظة إذا لزم الأمر"
-                        onChange={(e) =>
-                          onPatchTransfer(item.id, (r) => updateTransferField(r, 'note', e.target.value))
-                        }
-                      />
+                      {isFinanciallyLocked ? (
+                        <div className="tc-readonly-value">
+                          {item.note || '—'}
+                        </div>
+                      ) : (
+                        <input
+                          className="tc-input"
+                          value={item.note || ''}
+                          placeholder="اكتب ملاحظة إذا لزم الأمر"
+                          onChange={(e) =>
+                            onPatchTransfer(item.id, (r) => updateTransferField(r, 'note', e.target.value))
+                          }
+                        />
+                      )}
                     </label>
                     <div className="tc-field tc-field--full">
                       <span>الحالة</span>
-                      {isPickupFlow ? (
+                      {isFinanciallyLocked ? (
+                        <div className="tc-readonly-value">
+                          {statusMeta[item.status]?.label || item.status}
+                        </div>
+                      ) : isPickupFlow ? (
                         <div className="tc-pickup-hint">
                           <span className="status-dot" />
                           تأكيد السحب بعد الحفظ
@@ -1049,7 +1164,11 @@ function TransferTable({
               <div className="tc-actions">
                 {!isEditing ? (
                   <>
-                    <StatusActions item={item} onTransition={onTransition} />
+                    {isFinanciallyLocked ? (
+                      <span className="status-done-badge">تعديل هوية فقط</span>
+                    ) : (
+                      <StatusActions item={item} onTransition={onTransition} />
+                    )}
                     <button
                       className="tc-btn tc-btn--edit"
                       onClick={() => setEditingId(item.id)}
@@ -1066,17 +1185,17 @@ function TransferTable({
                       {isPickupFlow ? 'حفظ السحب' : 'حفظ'}
                     </button>
                     <button
-                      className={isPickupFlow ? 'tc-btn tc-btn--ghost' : 'tc-btn tc-btn--danger'}
+                      className="tc-btn tc-btn--ghost"
                       onClick={() => {
                         if (isPickupFlow) {
                           setPickupFlowId(null)
                           setEditingId(null)
                           return
                         }
-                        if (onDeleteTransfer(item.id)) setEditingId(null)
+                        setEditingId(null)
                       }}
                     >
-                      {isPickupFlow ? 'إلغاء' : 'حذف'}
+                      إلغاء
                     </button>
                   </>
                 )}

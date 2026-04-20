@@ -344,16 +344,18 @@ export function transitionTransfer(item, nextStatus) {
 /* ── Field updates ── */
 
 /*
-  A settled transfer is LOCKED: its amounts, customer and identifying
-  fields must not change without first un-settling (via the reset flow).
-  updateAmount/updateTransferField refuse to apply changes on such items.
-  This is a safety net — the UI already hides the edit controls, but a
-  library-level guard protects against any future regression that would
-  silently corrupt the settlement history or profit claims.
+  A settled transfer is financially LOCKED: amounts, status, customer,
+  notes, and any accounting-related fields must not change without a
+  dedicated reversal flow. The only allowed edits are identity fixes:
+  reference, senderName, receiverName.
+  This keeps the settlement history intact while still allowing safe
+  correction of non-financial identifiers discovered later.
 */
 export function isTransferLocked(item) {
   return Boolean(item && item.settled === true)
 }
+
+const SETTLED_IDENTITY_EDITABLE_FIELDS = new Set(['reference', 'senderName', 'receiverName'])
 
 export function updateAmount(item, field, value) {
   if (isTransferLocked(item)) return item
@@ -373,7 +375,7 @@ export function updateAmount(item, field, value) {
 }
 
 export function updateTransferField(item, field, value) {
-  if (isTransferLocked(item)) return item
+  if (isTransferLocked(item) && !SETTLED_IDENTITY_EDITABLE_FIELDS.has(field)) return item
   const oldValue = item[field]
   if (field === 'customerId') {
     return {

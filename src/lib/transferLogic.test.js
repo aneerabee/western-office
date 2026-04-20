@@ -904,29 +904,51 @@ describe('قفل الحوالات المسوّاة', () => {
     expect(result.customerId).toBe(201)
   })
 
-  it('updateTransferField يرفض تعديل أي حقل في حوالة مسوّاة', () => {
+  it('updateTransferField يسمح فقط بتعديل هوية الحوالة المسوّاة', () => {
     const settled = makeTx({
       id: 904,
       reference: 'ORIG-REF',
       senderName: 'فلان',
+      receiverName: 'المستلم الأول',
       status: 'picked_up',
       settled: true,
+      settledAt: '2026-04-13T10:00:00.000Z',
+      updatedAt: '2026-04-13T10:00:00.000Z',
+      history: [],
     })
     const a = updateTransferField(settled, 'reference', 'NEW-REF')
-    expect(a).toBe(settled)
-    expect(a.reference).toBe('ORIG-REF')
+    expect(a).not.toBe(settled)
+    expect(a.reference).toBe('NEW-REF')
 
     const b = updateTransferField(settled, 'senderName', 'شخص آخر')
-    expect(b).toBe(settled)
-    expect(b.senderName).toBe('فلان')
+    expect(b).not.toBe(settled)
+    expect(b.senderName).toBe('شخص آخر')
+
+    const c = updateTransferField(settled, 'receiverName', 'المستلم الجديد')
+    expect(c).not.toBe(settled)
+    expect(c.receiverName).toBe('المستلم الجديد')
+  })
+
+  it('updateTransferField يرفض الحقول غير المسموح بها في حوالة مسوّاة', () => {
+    const settled = makeTx({
+      id: 906,
+      reference: 'ORIG-REF',
+      senderName: 'فلان',
+      receiverName: 'المستلم الأول',
+      note: '',
+      status: 'picked_up',
+      settled: true,
+      settledAt: '2026-04-13T10:00:00.000Z',
+    })
 
     const c = updateTransferField(settled, 'note', 'ملاحظة')
     expect(c).toBe(settled)
+    expect(c.note).toBe('')
   })
 
   it('updateTransferField يعمل طبيعياً على حوالة غير مسوّاة', () => {
     const unsettled = makeTx({
-      id: 905,
+      id: 907,
       customerId: 100,
       status: 'received',
       settled: false,
