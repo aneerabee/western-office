@@ -124,7 +124,7 @@ function detectPublicListMode() {
 function detectMohammadLedgerMode() {
   if (typeof window === 'undefined') return false
   const params = new URLSearchParams(window.location.search)
-  return params.get('app') === 'mohammad-ledger'
+  return import.meta.env.VITE_DEFAULT_APP === 'mohammad-ledger' || params.get('app') === 'mohammad-ledger'
 }
 
 function App() {

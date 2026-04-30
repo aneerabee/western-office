@@ -5493,7 +5493,7 @@ tbody tr:hover {
 
 .ml3-tabs {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 4px;
   padding: 4px;
   border-radius: 10px;
@@ -5531,6 +5531,14 @@ tbody tr:hover {
   grid-template-columns: minmax(280px, 320px) minmax(0, 1fr);
   gap: 10px;
   align-items: start;
+}
+
+.ml3-layout.is-content-only {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.ml3-layout.is-entry {
+  grid-template-columns: minmax(300px, 390px) minmax(0, 1fr);
 }
 
 .ml3-content,
@@ -5627,7 +5635,8 @@ tbody tr:hover {
   gap: 6px;
 }
 
-.ml3-entry-card label {
+.ml3-entry-card label,
+.ml3-add-account label {
   display: grid;
   gap: 4px;
   font-weight: 900;
@@ -5644,15 +5653,89 @@ tbody tr:hover {
 
 .ml3-account-picker {
   display: grid;
-  gap: 3px;
+  gap: 5px;
+  border-radius: 12px;
+  padding: 7px;
+  background: #f8faf7;
+  border: 1px solid #e1e9df;
 }
 
 .ml3-account-picker input {
   min-height: 30px;
 }
 
-.ml3-account-picker select {
-  min-height: 32px;
+.ml3-picker-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.ml3-picker-head strong {
+  color: #25352d;
+}
+
+.ml3-picker-head button {
+  border: 0;
+  border-radius: 999px;
+  background: #f0e7df;
+  color: #884036;
+  padding: 3px 7px;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 950;
+  cursor: pointer;
+}
+
+.ml3-picked-account {
+  border-radius: 9px;
+  padding: 5px 7px;
+  background: #25352d;
+  color: #ffffff;
+  font-weight: 900;
+  font-size: 0.76rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ml3-picker-results {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+  max-height: 150px;
+  overflow: auto;
+}
+
+.ml3-picker-results button {
+  border: 1px solid #d9e1d7;
+  border-radius: 9px;
+  background: #ffffff;
+  color: #17211c;
+  min-height: 42px;
+  padding: 5px 7px;
+  display: grid;
+  gap: 1px;
+  text-align: inherit;
+  cursor: pointer;
+}
+
+.ml3-picker-results button.is-selected {
+  border-color: #19a364;
+  background: #e3f8ea;
+}
+
+.ml3-picker-results strong,
+.ml3-picker-results span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ml3-picker-results span {
+  color: #68756f;
+  font-size: 0.68rem;
 }
 
 .ml3-swap {
@@ -5737,6 +5820,97 @@ tbody tr:hover {
 .ml3-add-account {
   display: grid;
   gap: 6px;
+}
+
+.ml3-account-presets {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.ml3-account-presets button {
+  border: 1px solid #d9e1d7;
+  border-radius: 10px;
+  min-height: 52px;
+  padding: 7px;
+  background: #fbfdf9;
+  color: #17211c;
+  display: grid;
+  gap: 2px;
+  text-align: inherit;
+  cursor: pointer;
+  font: inherit;
+  transition:
+    transform 0.16s ease,
+    box-shadow 0.16s ease,
+    border-color 0.16s ease,
+    background 0.16s ease;
+}
+
+.ml3-account-presets button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 22px rgba(37, 53, 45, 0.12);
+}
+
+.ml3-account-presets button.is-active {
+  background: #e3f8ea;
+  border-color: #19a364;
+}
+
+.ml3-account-presets strong,
+.ml3-account-presets span,
+.ml3-account-summary strong,
+.ml3-account-summary span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ml3-account-presets strong {
+  font-size: 0.78rem;
+}
+
+.ml3-account-presets span,
+.ml3-account-summary span {
+  color: #68756f;
+  font-size: 0.68rem;
+  font-weight: 850;
+}
+
+.ml3-account-summary {
+  display: grid;
+  gap: 2px;
+  border-radius: 10px;
+  padding: 7px;
+  background: #eef7ff;
+  border: 1px solid #b7d8ef;
+}
+
+.ml3-account-summary strong {
+  color: #116fab;
+  font-size: 0.8rem;
+}
+
+.ml3-entry-guide-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.ml3-entry-guide-grid div {
+  border-radius: 10px;
+  padding: 8px;
+  background: #f8faf7;
+  border: 1px solid #e1e9df;
+  display: grid;
+  gap: 3px;
+}
+
+.ml3-entry-guide-grid span {
+  color: #68756f;
+  font-size: 0.78rem;
+  line-height: 1.35;
 }
 
 .ml3-panel-head {
@@ -6574,6 +6748,11 @@ tbody tr:hover {
     grid-template-columns: 1fr;
   }
 
+  .ml3-layout.is-entry,
+  .ml3-layout.is-content-only {
+    grid-template-columns: 1fr;
+  }
+
   .ml3-entry {
     position: static;
     order: 2;
@@ -6640,7 +6819,7 @@ tbody tr:hover {
     top: 0;
     z-index: 15;
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
   }
 
   .ml3-tabs button {
@@ -6659,8 +6838,14 @@ tbody tr:hover {
   }
 
   .ml3-account-switcher,
-  .ml3-home-grid {
+  .ml3-home-grid,
+  .ml3-entry-guide-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ml3-picker-results,
+  .ml3-account-presets {
+    grid-template-columns: 1fr;
   }
 
   .ml3-home-focus {

@@ -36,10 +36,56 @@ const movementLabels = {
 
 const sectionTabs = [
   { key: 'overview', label: 'ملخص' },
+  { key: 'entry', label: 'إدخال' },
   { key: 'accounts', label: 'الأرصدة' },
   { key: 'review', label: 'مراجعة' },
   { key: 'history', label: 'السجل' },
 ]
+
+const accountPresets = [
+  {
+    key: 'person-cash',
+    title: 'شخص أو جهة',
+    detail: 'رصيد بيننا',
+    type: ACCOUNT_TYPES.PERSON,
+    valueKind: VALUE_KINDS.RECEIVABLE,
+    subAccountName: 'كاش',
+  },
+  {
+    key: 'own-cash',
+    title: 'كاش عندي',
+    detail: 'مكان مال نقدي',
+    type: ACCOUNT_TYPES.CASH,
+    valueKind: VALUE_KINDS.CASH,
+    subAccountName: 'كاش',
+  },
+  {
+    key: 'own-bank',
+    title: 'حساب مصرفي',
+    detail: 'مكان مال مصرفي',
+    type: ACCOUNT_TYPES.BANK,
+    valueKind: VALUE_KINDS.BANK,
+    subAccountName: 'مصرفي',
+  },
+  {
+    key: 'asset',
+    title: 'أصل',
+    detail: 'شيء له قيمة',
+    type: ACCOUNT_TYPES.ASSET,
+    valueKind: VALUE_KINDS.ASSET,
+    subAccountName: 'أصل',
+  },
+  {
+    key: 'expense',
+    title: 'مصروف',
+    detail: 'صرف نهائي',
+    type: ACCOUNT_TYPES.EXPENSE,
+    valueKind: VALUE_KINDS.EXPENSE,
+    subAccountName: 'مصروف',
+  },
+]
+
+const accountDetailOptions = ['كاش', 'مصرفي', 'دولار', 'حساب', 'أصل', 'مصروف']
 
 const accountGroupTabs = [
   { key: 'people', label: 'الناس', title: 'الناس', subtitle: 'كل الأشخاص والجهات، حتى الحسابات المسكرة تظهر هنا للتأكد.' },
@@ -126,7 +172,7 @@ function emptyMovementDraft(type = MOVEMENT_TYPES.TRANSFER) {
 function emptyAccountDraft() {
   return {
     ownerName: '',
-    subAccountName: 'حساب عادي',
+    subAccountName: 'كاش',
     type: ACCOUNT_TYPES.PERSON,
     valueKind: VALUE_KINDS.RECEIVABLE,
     notes: '',
@@ -250,22 +296,35 @@ function AccountSearchSelect({ label, value, accounts, onChange, allowEmpty = tr
     : filteredAccounts
 
   return (
-    <label className="ml3-account-picker">
-      {label}
+    <div className="ml3-account-picker">
+      <div className="ml3-picker-head">
+        <strong>{label}</strong>
+        {allowEmpty && value ? (
+          <button type="button" onClick={() => onChange(null)}>مسح</button>
+        ) : null}
+      </div>
       <input
         value={query}
         onChange={(event) => setQuery(event.target.value)}
-        placeholder="ابحث بالاسم"
+        placeholder="اكتب أول حرف من الاسم"
       />
-      <select value={value || ''} onChange={(event) => onChange(event.target.value || null)}>
-        {allowEmpty ? <option value="">بدون</option> : null}
-        {visibleAccounts.map((account) => (
-          <option key={account.id} value={account.id}>
-            {accountLabel(account)}
-          </option>
+      <div className="ml3-picked-account">
+        {selectedAccount ? accountLabel(selectedAccount) : 'لم يتم اختيار طرف'}
+      </div>
+      <div className="ml3-picker-results">
+        {visibleAccounts.slice(0, 8).map((account) => (
+          <button
+            type="button"
+            key={account.id}
+            className={account.id === value ? 'is-selected' : ''}
+            onClick={() => onChange(account.id)}
+          >
+            <strong>{account.ownerName}</strong>
+            <span>{account.subAccountName}</span>
+          </button>
         ))}
-      </select>
-    </label>
+      </div>
+    </div>
   )
 }
 
@@ -707,6 +766,15 @@ export default function MohammadLedgerApp() {
     }))
   }
 
+  function chooseAccountPreset(preset) {
+    setAccountDraft((current) => ({
+      ...current,
+      type: preset.type,
+      valueKind: preset.valueKind,
+      subAccountName: preset.subAccountName,
+    }))
+  }
+
   function saveMovement(event) {
     event.preventDefault()
     const movement = postMovement({ ...normalizedDraft, note: movementDraft.note.trim() }, accounts)
@@ -936,6 +1004,29 @@ export default function MohammadLedgerApp() {
   }
 
   function renderSection() {
+    if (activeSection === 'entry') {
+      return (
+        <section className="ml3-panel ml3-entry-guide">
+          <div className="ml3-panel-head">
+            <div>
+              <h2>إدخال فقط</h2>
+              <p>هنا تضيف حركة أو حساب جديد. باقي الأقسام للعرض والمراجعة فقط.</p>
+            </div>
+            <span>واضح</span>
+          </div>
+          <div className="ml3-entry-guide-grid">
+            <div>
+              <strong>الحركة</strong>
+              <span>اختر النوع، المبلغ، الطرفين، ثم راقب التأثير قبل الحفظ.</span>
+            </div>
+            <div>
+              <strong>الحساب الجديد</strong>
+              <span>ابدأ بتحديد هل هو شخص، كاش، مصرفي، أصل، أو مصروف.</span>
+            </div>
+          </div>
+        </section>
+      )
+    }
     if (activeSection === 'accounts') return renderAccountsSection()
     if (activeSection === 'review') {
       return (
@@ -1026,11 +1117,11 @@ export default function MohammadLedgerApp() {
             <p>
               {reviewMovements.length || balancesByKind.review.length
                 ? 'ابدأ من قسم المراجعة قبل إدخال حركات جديدة كثيرة.'
-                : 'استخدم نموذج الإدخال للحركة الجديدة، وافتح الأرصدة عند الحاجة للتفاصيل.'}
+                : 'افتح قسم الإدخال للحركة الجديدة، واترك الأرصدة للعرض والمراجعة فقط.'}
             </p>
           </div>
-          <button type="button" onClick={() => setActiveSection(reviewMovements.length || balancesByKind.review.length ? 'review' : 'accounts')}>
-            {reviewMovements.length || balancesByKind.review.length ? 'فتح المراجعة' : 'فتح الأرصدة'}
+          <button type="button" onClick={() => setActiveSection(reviewMovements.length || balancesByKind.review.length ? 'review' : 'entry')}>
+            {reviewMovements.length || balancesByKind.review.length ? 'فتح المراجعة' : 'إضافة حركة'}
           </button>
         </div>
 
@@ -1122,7 +1213,8 @@ export default function MohammadLedgerApp() {
           ))}
         </nav>
 
-        <section className="ml3-layout">
+        <section className={`ml3-layout ${activeSection === 'entry' ? 'is-entry' : 'is-content-only'}`}>
+          {activeSection === 'entry' ? (
           <aside className="ml3-entry">
             <form className="ml3-entry-card" onSubmit={saveMovement}>
               <div className="ml3-entry-head">
@@ -1223,38 +1315,53 @@ export default function MohammadLedgerApp() {
             </form>
 
             <form className="ml3-add-account" onSubmit={addAccount}>
-              <h3>حساب جديد</h3>
-              <input
-                value={accountDraft.ownerName}
-                onChange={(event) => setAccountDraft((current) => ({ ...current, ownerName: event.target.value }))}
-                placeholder="الاسم"
-              />
-              <input
-                value={accountDraft.subAccountName}
-                onChange={(event) => setAccountDraft((current) => ({ ...current, subAccountName: event.target.value }))}
-                placeholder="مثال: حساب عادي / كاش / مصرفي"
-              />
-              <div className="ml3-field-pair">
+              <div className="ml3-entry-head">
+                <div>
+                  <span>إضافة حساب</span>
+                  <h2>تحديد دقيق</h2>
+                </div>
+                <b>{accountTypeLabels[accountDraft.type]}</b>
+              </div>
+              <div className="ml3-account-presets">
+                {accountPresets.map((preset) => (
+                  <button
+                    type="button"
+                    key={preset.key}
+                    className={accountDraft.type === preset.type && accountDraft.valueKind === preset.valueKind ? 'is-active' : ''}
+                    onClick={() => chooseAccountPreset(preset)}
+                  >
+                    <strong>{preset.title}</strong>
+                    <span>{preset.detail}</span>
+                  </button>
+                ))}
+              </div>
+              <label>
+                الاسم
+                <input
+                  value={accountDraft.ownerName}
+                  onChange={(event) => setAccountDraft((current) => ({ ...current, ownerName: event.target.value }))}
+                  placeholder="اسم الشخص أو المكان أو الأصل"
+                />
+              </label>
+              <label>
+                طريقة التعامل
                 <select
-                  value={accountDraft.type}
-                  onChange={(event) => setAccountDraft((current) => ({ ...current, type: event.target.value }))}
+                  value={accountDraft.subAccountName}
+                  onChange={(event) => setAccountDraft((current) => ({ ...current, subAccountName: event.target.value }))}
                 >
-                  {Object.entries(accountTypeLabels).map(([value, label]) => (
-                    <option key={value} value={value}>{label}</option>
+                  {accountDetailOptions.map((option) => (
+                    <option key={option} value={option}>{option}</option>
                   ))}
                 </select>
-                <select
-                  value={accountDraft.valueKind}
-                  onChange={(event) => setAccountDraft((current) => ({ ...current, valueKind: event.target.value }))}
-                >
-                  {Object.entries(valueKindLabels).map(([value, label]) => (
-                    <option key={value} value={value}>{label}</option>
-                  ))}
-                </select>
+              </label>
+              <div className="ml3-account-summary">
+                <span>سيظهر كـ</span>
+                <strong>{accountTypeLabels[accountDraft.type]} · {valueKindLabels[accountDraft.valueKind]} · {accountDraft.subAccountName}</strong>
               </div>
               <button type="submit">إضافة حساب</button>
             </form>
           </aside>
+          ) : null}
 
           <section className="ml3-content">
             {feedback ? <div className="ml3-feedback">{feedback}</div> : null}
