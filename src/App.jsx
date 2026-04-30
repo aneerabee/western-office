@@ -48,6 +48,7 @@ import TrashTab from './components/TrashTab'
 import PeopleTab from './components/PeopleTab'
 import PublicTurkishReceivers from './components/PublicTurkishReceivers'
 import StatsHero from './components/StatsHero'
+import MohammadLedgerApp from './mohammadLedger/MohammadLedgerApp'
 import {
   buildPeopleList,
   buildReceiverColorMap,
@@ -120,7 +121,17 @@ function detectPublicListMode() {
   return value === 'turkish-receivers' ? 'turkish-receivers' : null
 }
 
+function detectMohammadLedgerMode() {
+  if (typeof window === 'undefined') return false
+  const params = new URLSearchParams(window.location.search)
+  return params.get('app') === 'mohammad-ledger'
+}
+
 function App() {
+  if (detectMohammadLedgerMode()) {
+    return <MohammadLedgerApp />
+  }
+
   // Viewer mode is detected ONCE at mount and never changes during the
   // session. It guarantees this entire tab is treated as read-only and
   // scoped to one customer.

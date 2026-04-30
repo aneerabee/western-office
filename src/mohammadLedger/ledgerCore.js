@@ -1,0 +1,347 @@
+import { ACCOUNT_STATUSES, ACCOUNT_TYPES, buildAccountMap } from './accountCatalog'
+
+export const CURRENCIES = {
+  DINAR: 'LYD',
+  USD: 'USD',
+}
+
+export const MOVEMENT_TYPES = {
+  OPENING_BALANCE: 'opening_balance',
+  TRANSFER: 'transfer',
+  EXPENSE: 'expense',
+  TRUCK_EXPENSE: 'truck_expense',
+  TRUCK_INCOME: 'truck_income',
+  USD_SALE: 'usd_sale',
+  USD_PURCHASE: 'usd_purchase',
+  EXTERNAL_INCOME: 'external_income',
+  CORRECTION: 'correction',
+}
+
+export const MOVEMENT_STATUSES = {
+  DRAFT: 'draft',
+  NEEDS_REVIEW: 'needs_review',
+  POSTED: 'posted',
+  VOIDED: 'voided',
+}
+
+const TWO_SIDED_TYPES = new Set([
+  MOVEMENT_TYPES.TRANSFER,
+  MOVEMENT_TYPES.USD_SALE,
+  MOVEMENT_TYPES.USD_PURCHASE,
+])
+
+const SOURCE_REQUIRED_TYPES = new Set([
+  MOVEMENT_TYPES.TRANSFER,
+  MOVEMENT_TYPES.EXPENSE,
+  MOVEMENT_TYPES.TRUCK_EXPENSE,
+  MOVEMENT_TYPES.USD_SALE,
+  MOVEMENT_TYPES.USD_PURCHASE,
+])
+
+const DESTINATION_REQUIRED_TYPES = new Set([
+  MOVEMENT_TYPES.TRANSFER,
+  MOVEMENT_TYPES.TRUCK_INCOME,
+  MOVEMENT_TYPES.USD_SALE,
+  MOVEMENT_TYPES.USD_PURCHASE,
+  MOVEMENT_TYPES.EXTERNAL_INCOME,
+])
+
+function asNumber(value) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0
+}
+
+function isoNow() {
+  return new Date().toISOString()
+}
+
+export function roundMoney(value) {
+  return Math.round((asNumber(value) + Number.EPSILON) * 1_000_000) / 1_000_000
+}
+
+export function createOpeningMovements(accounts = [], createdAt = isoNow()) {
+  return accounts.flatMap((account) => {
+    const entries = []
+    if (asNumber(account.openingDinar)) {
+      entries.push({
+        id: `opening-${account.id}-dinar`,
+        type: MOVEMENT_TYPES.OPENING_BALANCE,
+        status: MOVEMENT_STATUSES.POSTED,
+        currency: CURRENCIES.DINAR,
+        amount: roundMoney(account.openingDinar),
+        destinationAccountId: account.id,
+        sourceAccountId: null,
+        note: `رصيد افتتاحي من Numbers: ${account.legacyName}`,
+        createdAt,
+        updatedAt: createdAt,
+      })
+    }
+    if (asNumber(account.openingUsd)) {
+      entries.push({
+        id: `opening-${account.id}-usd`,
+        type: MOVEMENT_TYPES.OPENING_BALANCE,
+        status: MOVEMENT_STATUSES.POSTED,
+        currency: CURRENCIES.USD,
+        amount: roundMoney(account.openingUsd),
+        destinationAccountId: account.id,
+        sourceAccountId: null,
+        note: `رصيد افتتاحي دولار من Numbers: ${account.legacyName}`,
+        createdAt,
+        updatedAt: createdAt,
+      })
+    }
+    return entries
+  })
+}
+
+export function validateMovement(movement, accounts = []) {
+  const accountMap = buildAccountMap(accounts)
+  const errors = []
+  const warnings = []
+  const type = movement?.type
+  const amount = movement?.amount
+  const currency = movement?.currency
+  const sourceId = movement?.sourceAccountId || null
+  const destinationId = movement?.destinationAccountId || null
+
+  if (!type || !Object.values(MOVEMENT_TYPES).includes(type)) {
+    errors.push({ field: 'type', message: 'نوع الحركة مطلوب وغير معروف.' })
+  }
+  if (typeof amount !== 'number' || !Number.isFinite(amount) || amount === 0) {
+    errors.push({ field: 'amount', message: 'القيمة يجب أن تكون رقمًا غير صفري.' })
+  }
+  if (!currency || !Object.values(CURRENCIES).includes(currency)) {
+    errors.push({ field: 'currency', message: 'العملة مطلوبة.' })
+  }
+  if (SOURCE_REQUIRED_TYPES.has(type) && !sourceId) {
+    errors.push({ field: 'sourceAccountId', message: 'حساب المصدر مطلوب لهذه الحركة.' })
+  }
+  if (DESTINATION_REQUIRED_TYPES.has(type) && !destinationId) {
+    errors.push({ field: 'destinationAccountId', message: 'حساب الوجهة مطلوب لهذه الحركة.' })
+  }
+  if (TWO_SIDED_TYPES.has(type) && sourceId && destinationId && sourceId === destinationId) {
+    errors.push({ field: 'destinationAccountId', message: 'لا يمكن أن يكون المصدر والوجهة نفس الحساب.' })
+  }
+
+  for (const [field, accountId] of [
+    ['sourceAccountId', sourceId],
+    ['destinationAccountId', destinationId],
+  ]) {
+    if (!accountId) continue
+    const account = accountMap.get(accountId)
+    if (!account) {
+      errors.push({ field, message: 'الحساب غير موجود.' })
+      continue
+    }
+    if (account.type === ACCOUNT_TYPES.SUMMARY) {
+      errors.push({ field, message: 'حسابات الملخص لا تستخدم كطرف حركة.' })
+    }
+    if (account.status === ACCOUNT_STATUSES.NEEDS_REVIEW) {
+      warnings.push({ field, message: 'الحساب يحتاج مراجعة قبل الاعتماد النهائي.' })
+    }
+  }
+
+  if (type === MOVEMENT_TYPES.CORRECTION && !movement?.note) {
+    errors.push({ field: 'note', message: 'التصحيح يحتاج ملاحظة توضح السبب.' })
+  }
+
+  return {
+    ok: errors.length === 0,
+    status: errors.length ? MOVEMENT_STATUSES.NEEDS_REVIEW : MOVEMENT_STATUSES.POSTED,
+    errors,
+    warnings,
+  }
+}
+
+export function buildPostingEntries(movement) {
+  const amount = roundMoney(movement.amount)
+  const currency = movement.currency
+
+  if (movement.status === MOVEMENT_STATUSES.VOIDED) return []
+
+  switch (movement.type) {
+    case MOVEMENT_TYPES.OPENING_BALANCE:
+    case MOVEMENT_TYPES.EXTERNAL_INCOME:
+    case MOVEMENT_TYPES.TRUCK_INCOME:
+      return [{ accountId: movement.destinationAccountId, currency, delta: amount }]
+    case MOVEMENT_TYPES.EXPENSE:
+    case MOVEMENT_TYPES.TRUCK_EXPENSE:
+      return [{ accountId: movement.sourceAccountId, currency, delta: -Math.abs(amount) }]
+    case MOVEMENT_TYPES.TRANSFER:
+      return [
+        { accountId: movement.sourceAccountId, currency, delta: -Math.abs(amount) },
+        { accountId: movement.destinationAccountId, currency, delta: Math.abs(amount) },
+      ]
+    case MOVEMENT_TYPES.USD_SALE:
+      return [
+        { accountId: movement.sourceAccountId, currency: CURRENCIES.USD, delta: -Math.abs(amount) },
+        {
+          accountId: movement.destinationAccountId,
+          currency: CURRENCIES.DINAR,
+          delta: roundMoney(Math.abs(amount) * asNumber(movement.rate)),
+        },
+      ]
+    case MOVEMENT_TYPES.USD_PURCHASE:
+      return [
+        { accountId: movement.sourceAccountId, currency: CURRENCIES.DINAR, delta: -Math.abs(amount) },
+        {
+          accountId: movement.destinationAccountId,
+          currency: CURRENCIES.USD,
+          delta: roundMoney(Math.abs(amount) / asNumber(movement.rate)),
+        },
+      ]
+    case MOVEMENT_TYPES.CORRECTION:
+      return [{ accountId: movement.destinationAccountId, currency, delta: amount }]
+    default:
+      return []
+  }
+}
+
+export function summarizeBalances(accounts = [], movements = []) {
+  const balances = new Map()
+
+  for (const account of accounts) {
+    balances.set(account.id, {
+      account,
+      dinar: 0,
+      usd: 0,
+      postedCount: 0,
+    })
+  }
+
+  for (const movement of movements) {
+    if (movement.status !== MOVEMENT_STATUSES.POSTED) continue
+    for (const entry of buildPostingEntries(movement)) {
+      const bucket = balances.get(entry.accountId)
+      if (!bucket) continue
+      if (entry.currency === CURRENCIES.DINAR) bucket.dinar = roundMoney(bucket.dinar + entry.delta)
+      if (entry.currency === CURRENCIES.USD) bucket.usd = roundMoney(bucket.usd + entry.delta)
+      bucket.postedCount += 1
+    }
+  }
+
+  return Array.from(balances.values())
+}
+
+export function getAccountBalance(accountId, accounts = [], movements = []) {
+  return summarizeBalances(accounts, movements).find((bucket) => bucket.account.id === accountId) || null
+}
+
+export function previewMovement(movement, accounts = [], movements = []) {
+  const validation = validateMovement(movement, accounts)
+  const before = summarizeBalances(accounts, movements)
+  const beforeById = new Map(before.map((bucket) => [bucket.account.id, bucket]))
+  const postingEntries = validation.ok ? buildPostingEntries({ ...movement, status: MOVEMENT_STATUSES.POSTED }) : []
+
+  return {
+    validation,
+    effects: postingEntries.map((entry) => {
+      const current = beforeById.get(entry.accountId)
+      const beforeDinar = current?.dinar || 0
+      const beforeUsd = current?.usd || 0
+      return {
+        accountId: entry.accountId,
+        account: current?.account || null,
+        currency: entry.currency,
+        delta: entry.delta,
+        before: entry.currency === CURRENCIES.DINAR ? beforeDinar : beforeUsd,
+        after: roundMoney((entry.currency === CURRENCIES.DINAR ? beforeDinar : beforeUsd) + entry.delta),
+      }
+    }),
+  }
+}
+
+export function postMovement(movement, accounts = []) {
+  const validation = validateMovement(movement, accounts)
+  const now = isoNow()
+  return {
+    ...movement,
+    id: movement.id || `movement-${now}-${Math.random().toString(36).slice(2, 8)}`,
+    status: validation.status,
+    validation,
+    createdAt: movement.createdAt || now,
+    updatedAt: now,
+  }
+}
+
+export function createAccount({
+  id,
+  ownerName,
+  subAccountName,
+  type,
+  valueKind,
+  openingDinar = 0,
+  openingUsd = 0,
+  notes = '',
+  status = ACCOUNT_STATUSES.ACTIVE,
+}) {
+  const normalizedOwner = String(ownerName || '').trim()
+  const normalizedSub = String(subAccountName || '').trim()
+  const normalizedType = type || ACCOUNT_TYPES.PERSON
+  const normalizedValueKind = valueKind || 'receivable'
+  const stableBase = `${normalizedOwner}-${normalizedSub || normalizedType}`
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/[^\p{L}\p{N}-]+/gu, '')
+
+  return {
+    id: id || `account-${stableBase || Date.now()}`,
+    legacyName: normalizedSub ? `${normalizedOwner} / ${normalizedSub}` : normalizedOwner,
+    ownerName: normalizedOwner,
+    subAccountName: normalizedSub || 'رئيسي',
+    type: normalizedType,
+    valueKind: normalizedValueKind,
+    openingDinar: roundMoney(openingDinar),
+    openingUsd: roundMoney(openingUsd),
+    status,
+    notes,
+    createdFrom: 'manual',
+  }
+}
+
+export function validateAccount(account, existingAccounts = []) {
+  const errors = []
+  if (!account?.ownerName?.trim()) errors.push({ field: 'ownerName', message: 'الاسم الرئيسي مطلوب.' })
+  if (!account?.subAccountName?.trim()) {
+    errors.push({ field: 'subAccountName', message: 'نوع/اسم الحساب الفرعي مطلوب.' })
+  }
+  if (!Object.values(ACCOUNT_TYPES).includes(account?.type)) {
+    errors.push({ field: 'type', message: 'نوع الحساب غير معروف.' })
+  }
+  if (existingAccounts.some((item) => item.id === account?.id)) {
+    errors.push({ field: 'id', message: 'معرف الحساب مستخدم مسبقًا.' })
+  }
+
+  return { ok: errors.length === 0, errors }
+}
+
+export function voidMovement(movement, reason = '', voidedAt = isoNow()) {
+  if (!movement || movement.status !== MOVEMENT_STATUSES.POSTED) {
+    return {
+      movement,
+      ok: false,
+      error: 'يمكن إلغاء الحركات المعتمدة فقط.',
+    }
+  }
+
+  return {
+    ok: true,
+    movement: {
+      ...movement,
+      status: MOVEMENT_STATUSES.VOIDED,
+      voidReason: reason,
+      voidedAt,
+      updatedAt: voidedAt,
+    },
+  }
+}
+
+export function formatBalanceMeaning(account, amount) {
+  const value = roundMoney(amount)
+  if (!value) return 'مسكر'
+  if (account?.valueKind === 'expense') return `تكلفة ${Math.abs(value)}`
+  if (account?.valueKind === 'asset') return `قيمة/رصيد أصل ${Math.abs(value)}`
+  if (account?.valueKind === 'cash' || account?.valueKind === 'bank') {
+    return value > 0 ? `موجود ${value}` : `ناقص ${Math.abs(value)}`
+  }
+  return value > 0 ? `لي عنده ${value}` : `عليّ له ${Math.abs(value)}`
+}
