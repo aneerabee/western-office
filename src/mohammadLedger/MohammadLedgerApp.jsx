@@ -429,34 +429,45 @@ function AccountSearchSelect({ label, value, accounts, onChange, allowEmpty = tr
   const visibleAccounts = selectedAccount && !filteredAccounts.some((account) => account.id === selectedAccount.id)
     ? [selectedAccount, ...filteredAccounts]
     : filteredAccounts
-  const resultAccounts = normalizedQuery ? visibleAccounts.slice(0, 6) : []
+  const resultAccounts = visibleAccounts.slice(0, normalizedQuery ? 9 : 7)
+
+  function chooseAccount(accountId) {
+    onChange(accountId)
+    setQuery('')
+  }
 
   return (
     <div className="ml3-account-picker">
       <div className="ml3-picker-head">
         <strong>{label}</strong>
         {allowEmpty && value ? (
-          <button type="button" onClick={() => onChange(null)}>مسح</button>
+          <button type="button" onClick={() => chooseAccount(null)}>مسح</button>
         ) : null}
       </div>
-      <input
-        value={query}
-        onChange={(event) => setQuery(event.target.value)}
-        placeholder="اكتب أول حرف من الاسم"
-      />
-      <div className="ml3-picked-account">
-        {selectedAccount ? accountLabel(selectedAccount) : 'لم يتم اختيار طرف'}
+      <div className={`ml3-picked-account ${selectedAccount ? 'is-selected' : ''}`}>
+        <span>{selectedAccount ? 'المختار' : 'اختر حساب'}</span>
+        <strong>{selectedAccount ? accountLabel(selectedAccount) : 'ابحث أو اختر من القائمة'}</strong>
       </div>
+      <label className="ml3-search-box">
+        <span>بحث</span>
+        <input
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="اكتب الاسم"
+        />
+      </label>
       <div className="ml3-picker-results">
         {resultAccounts.map((account) => (
           <button
             type="button"
             key={account.id}
             className={account.id === value ? 'is-selected' : ''}
-            onClick={() => onChange(account.id)}
+            onClick={() => chooseAccount(account.id)}
           >
+            <span className={`ml3-picker-dot ml3-picker-dot--${visualKind(account)}`} aria-hidden="true" />
             <strong>{account.ownerName}</strong>
-            <span>{account.subAccountName} · {accountTypeLabels[account.type] || account.type}</span>
+            <span>{account.subAccountName}</span>
+            <b>{accountTypeLabels[account.type] || account.type}</b>
           </button>
         ))}
         {normalizedQuery && resultAccounts.length === 0 ? <p>لا توجد نتيجة</p> : null}

@@ -5768,18 +5768,35 @@ tbody tr:hover {
 .ml3-step.is-done {
   grid-template-columns: 1fr;
   background:
-    linear-gradient(90deg, color-mix(in srgb, var(--ml3-step-tone) 8%, #ffffff), #ffffff 58%),
-    #ffffff;
-  border-color: color-mix(in srgb, var(--ml3-step-tone) 24%, #ffffff);
-  opacity: 1;
+    linear-gradient(90deg, color-mix(in srgb, var(--ml3-step-tone) 2%, #ffffff), #ffffff 58%),
+    #fbfcfb;
+  border-color: #edf1eb;
+  opacity: 0.62;
+  filter: saturate(0.32);
+  box-shadow: none;
+  animation: none;
 }
 
 .ml3-step.is-done .ml3-step-head span {
-  background: color-mix(in srgb, var(--ml3-step-tone) 76%, #25352d);
+  background: color-mix(in srgb, var(--ml3-step-tone) 38%, #87938d);
   width: 26px;
   height: 26px;
   border-radius: 9px;
   font-size: 0.78rem;
+  box-shadow: none;
+}
+
+.ml3-step.is-done::before {
+  opacity: 0.38;
+}
+
+.ml3-step.is-done .ml3-step-head strong,
+.ml3-step.is-done .ml3-step-summary {
+  color: #68756f;
+}
+
+.ml3-step.is-done .ml3-step-summary {
+  background: #f5f7f4;
 }
 
 .ml3-step-summary {
@@ -5946,15 +5963,15 @@ tbody tr:hover {
 
 .ml3-account-picker {
   display: grid;
-  gap: 4px;
-  border-radius: 10px;
-  padding: 6px;
-  background: #f8faf7;
-  border: 1px solid #e1e9df;
+  gap: 7px;
+  border-radius: 14px;
+  padding: 8px;
+  background: #ffffff;
+  border: 1px solid color-mix(in srgb, var(--ml3-step-tone, #0f7b62) 24%, #ffffff);
 }
 
 .ml3-account-picker input {
-  min-height: 28px;
+  min-height: 36px;
 }
 
 .ml3-picker-head {
@@ -5965,7 +5982,8 @@ tbody tr:hover {
 }
 
 .ml3-picker-head strong {
-  color: #25352d;
+  color: var(--ml3-step-ink, #25352d);
+  font-size: 0.95rem;
 }
 
 .ml3-picker-head button {
@@ -5981,47 +5999,75 @@ tbody tr:hover {
 }
 
 .ml3-picked-account {
-  border-radius: 9px;
-  padding: 4px 7px;
-  background: #25352d;
-  color: #ffffff;
+  border-radius: 12px;
+  padding: 8px;
+  background: #eef2ed;
+  color: #39473f;
   font-weight: 900;
-  font-size: 0.76rem;
+  font-size: 0.84rem;
+  overflow: hidden;
+  display: grid;
+  gap: 2px;
+  border: 1px solid #d9e1d7;
+}
+
+.ml3-picked-account.is-selected {
+  background: color-mix(in srgb, var(--ml3-step-tone, #0f7b62) 14%, #ffffff);
+  border-color: color-mix(in srgb, var(--ml3-step-tone, #0f7b62) 34%, #ffffff);
+  color: var(--ml3-step-ink, #25352d);
+}
+
+.ml3-picked-account span,
+.ml3-search-box span {
+  font-size: 0.68rem;
+  font-weight: 950;
+  opacity: 0.72;
+}
+
+.ml3-picked-account strong {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 0.96rem;
+}
+
+.ml3-search-box {
+  display: grid;
+  gap: 4px;
 }
 
 .ml3-picker-results {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 3px;
-  max-height: 132px;
+  gap: 5px;
+  max-height: 260px;
   overflow: auto;
 }
 
 .ml3-picker-results button {
   border: 1px solid #d9e1d7;
-  border-radius: 8px;
+  border-radius: 12px;
   background: #ffffff;
   color: #17211c;
-  min-height: 34px;
-  padding: 4px 7px;
+  min-height: 46px;
+  padding: 7px 8px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 6px;
+  grid-template-columns: 10px minmax(0, 1fr) auto;
+  gap: 7px;
   align-items: center;
   text-align: inherit;
   cursor: pointer;
 }
 
 .ml3-picker-results button.is-selected {
-  border-color: #19a364;
-  background: #e3f8ea;
+  border-color: color-mix(in srgb, var(--ml3-step-tone, #19a364) 58%, #ffffff);
+  background: color-mix(in srgb, var(--ml3-step-tone, #19a364) 12%, #ffffff);
 }
 
 .ml3-picker-results strong,
-.ml3-picker-results span {
+.ml3-picker-results span,
+.ml3-picker-results b {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -6029,13 +6075,40 @@ tbody tr:hover {
 }
 
 .ml3-picker-results strong {
-  font-size: 0.78rem;
+  font-size: 0.94rem;
+  grid-column: 2;
 }
 
 .ml3-picker-results span {
   color: #68756f;
+  font-size: 0.74rem;
+}
+
+.ml3-picker-results b {
+  grid-column: 3;
+  grid-row: 1 / span 2;
+  border-radius: 999px;
+  padding: 4px 7px;
+  background: #eef2ed;
+  color: #39473f;
   font-size: 0.68rem;
 }
+
+.ml3-picker-dot {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  width: 9px;
+  height: 28px;
+  border-radius: 999px;
+  background: #8ba09a;
+}
+
+.ml3-picker-dot--person { background: #c88600; }
+.ml3-picker-dot--cash { background: #0d8a54; }
+.ml3-picker-dot--bank { background: #116fab; }
+.ml3-picker-dot--expense { background: #b8322b; }
+.ml3-picker-dot--asset { background: #7052bd; }
+.ml3-picker-dot--review { background: #d33b32; }
 
 .ml3-picker-results p {
   margin: 0;
@@ -7413,16 +7486,25 @@ tbody tr:hover {
   }
 
   .ml3-account-picker {
-    gap: 3px;
-    padding: 4px;
+    gap: 6px;
+    padding: 7px;
   }
 
   .ml3-account-picker input {
-    min-height: 26px;
+    min-height: 36px;
   }
 
   .ml3-picked-account {
-    padding: 3px 6px;
+    padding: 7px;
+  }
+
+  .ml3-picker-results {
+    max-height: 300px;
+  }
+
+  .ml3-picker-results button {
+    min-height: 48px;
+    padding: 7px;
   }
 
   .ml3-preview {
