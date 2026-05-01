@@ -418,8 +418,10 @@ function AccountList({ title, subtitle, rows, emptyText = 'لا توجد عنا�
 
 function AccountSearchSelect({ label, value, accounts, onChange, allowEmpty = true }) {
   const [query, setQuery] = useState('')
+  const [isChanging, setIsChanging] = useState(false)
   const normalizedQuery = query.trim().toLowerCase()
   const selectedAccount = accounts.find((account) => account.id === value)
+  const showChooser = !selectedAccount || isChanging
   const filteredAccounts = accounts
     .filter((account) => {
       if (!normalizedQuery) return true
@@ -434,44 +436,54 @@ function AccountSearchSelect({ label, value, accounts, onChange, allowEmpty = tr
   function chooseAccount(accountId) {
     onChange(accountId)
     setQuery('')
+    setIsChanging(false)
   }
 
   return (
     <div className="ml3-account-picker">
       <div className="ml3-picker-head">
         <strong>{label}</strong>
-        {allowEmpty && value ? (
-          <button type="button" onClick={() => chooseAccount(null)}>مسح</button>
-        ) : null}
       </div>
       <div className={`ml3-picked-account ${selectedAccount ? 'is-selected' : ''}`}>
-        <span>{selectedAccount ? 'المختار' : 'اختر حساب'}</span>
-        <strong>{selectedAccount ? accountLabel(selectedAccount) : 'ابحث أو اختر من القائمة'}</strong>
+        <div>
+          <span>{selectedAccount ? 'تم الاختيار' : 'اختر حساب'}</span>
+          <strong>{selectedAccount ? accountLabel(selectedAccount) : 'ابحث أو اختر من القائمة'}</strong>
+        </div>
+        {selectedAccount ? (
+          <div className="ml3-picked-actions">
+            <button type="button" onClick={() => setIsChanging(true)}>تغيير</button>
+            {allowEmpty ? <button type="button" onClick={() => chooseAccount(null)}>مسح</button> : null}
+          </div>
+        ) : null}
       </div>
-      <label className="ml3-search-box">
-        <span>بحث</span>
-        <input
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="اكتب الاسم"
-        />
-      </label>
-      <div className="ml3-picker-results">
-        {resultAccounts.map((account) => (
-          <button
-            type="button"
-            key={account.id}
-            className={account.id === value ? 'is-selected' : ''}
-            onClick={() => chooseAccount(account.id)}
-          >
-            <span className={`ml3-picker-dot ml3-picker-dot--${visualKind(account)}`} aria-hidden="true" />
-            <strong>{account.ownerName}</strong>
-            <span>{account.subAccountName}</span>
-            <b>{accountTypeLabels[account.type] || account.type}</b>
-          </button>
-        ))}
-        {normalizedQuery && resultAccounts.length === 0 ? <p>لا توجد نتيجة</p> : null}
-      </div>
+      {showChooser ? (
+        <>
+          <label className="ml3-search-box">
+            <span>بحث</span>
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="اكتب الاسم"
+            />
+          </label>
+          <div className="ml3-picker-results">
+            {resultAccounts.map((account) => (
+              <button
+                type="button"
+                key={account.id}
+                className={account.id === value ? 'is-selected' : ''}
+                onClick={() => chooseAccount(account.id)}
+              >
+                <span className={`ml3-picker-dot ml3-picker-dot--${visualKind(account)}`} aria-hidden="true" />
+                <strong>{account.ownerName}</strong>
+                <span>{account.subAccountName}</span>
+                <b>{accountTypeLabels[account.type] || account.type}</b>
+              </button>
+            ))}
+            {normalizedQuery && resultAccounts.length === 0 ? <p>لا توجد نتيجة</p> : null}
+          </div>
+        </>
+      ) : null}
     </div>
   )
 }
