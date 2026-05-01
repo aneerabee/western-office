@@ -5653,6 +5653,42 @@ tbody tr:hover {
   line-height: 1.1;
 }
 
+.ml3-step-head button {
+  margin-inline-start: auto;
+  border: 0;
+  border-radius: 999px;
+  background: #e9eee8;
+  color: #39473f;
+  padding: 3px 8px;
+  font: inherit;
+  font-size: 0.68rem;
+  font-weight: 950;
+  cursor: pointer;
+}
+
+.ml3-step.is-done {
+  grid-template-columns: 1fr;
+  background: #ffffff;
+  border-color: #dce6da;
+}
+
+.ml3-step.is-done .ml3-step-head span {
+  background: #1f7a54;
+}
+
+.ml3-step-summary {
+  display: block;
+  min-width: 0;
+  border-radius: 9px;
+  background: #f0f5ef;
+  color: #25352d;
+  padding: 5px 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.8rem;
+}
+
 .ml3-entry-head b {
   border-radius: 999px;
   padding: 5px 8px;
@@ -5743,6 +5779,10 @@ tbody tr:hover {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 6px;
+}
+
+.ml3-field-pair.is-single {
+  grid-template-columns: 1fr;
 }
 
 .ml3-field-pair.has-rate {

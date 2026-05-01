@@ -119,6 +119,17 @@ const movementDefaultAccounts = {
   [MOVEMENT_TYPES.USD_PURCHASE]: { sourceAccountId: 'me-jumhouria', destinationAccountId: 'me-cash' },
 }
 
+const MOVEMENT_ENTRY_STEPS = {
+  TYPE: 1,
+  AMOUNT: 2,
+  CURRENCY: 3,
+  RATE: 4,
+  SOURCE: 5,
+  DESTINATION: 6,
+  NOTE: 7,
+  REVIEW: 8,
+}
+
 const accountPresets = [
   {
     key: 'person-cash',
@@ -805,7 +816,7 @@ export default function MohammadLedgerApp() {
   const [activeEntryMode, setActiveEntryMode] = useState('movement')
   const [activeAccountGroup, setActiveAccountGroup] = useState('people')
   const [movementDraft, setMovementDraft] = useState(() => emptyMovementDraft())
-  const [movementRouteReviewed, setMovementRouteReviewed] = useState(false)
+  const [movementStep, setMovementStep] = useState(MOVEMENT_ENTRY_STEPS.TYPE)
   const [accountDraft, setAccountDraft] = useState(emptyAccountDraft)
   const [selectedAccountId, setSelectedAccountId] = useState('')
   const [feedback, setFeedback] = useState('')
@@ -894,8 +905,10 @@ export default function MohammadLedgerApp() {
     Boolean(movementDraft.sourceAccountId) &&
     (!movementConfig.needsDestination || Boolean(movementDraft.destinationAccountId)) &&
     (!movementConfig.needsDestination || movementDraft.sourceAccountId !== movementDraft.destinationAccountId)
-  const canReviewMovement = canChooseMovementAccounts && hasMovementAccounts && movementRouteReviewed
+  const canReviewMovement = canChooseMovementAccounts && hasMovementAccounts && movementStep >= MOVEMENT_ENTRY_STEPS.REVIEW
   const selectedBucket = balances.find((bucket) => bucket.account.id === selectedAccountId) || null
+  const draftSourceAccount = accountById.get(movementDraft.sourceAccountId)
+  const draftDestinationAccount = accountById.get(movementDraft.destinationAccountId)
   useEffect(() => {
     if (typeof window === 'undefined') return
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ accounts, movements, savedAt: new Date().toISOString() }))
@@ -911,16 +924,13 @@ export default function MohammadLedgerApp() {
   }, [selectedAccountId])
 
   function updateMovementDraft(field, value) {
-    if (['amount', 'rate', 'currency', 'sourceAccountId', 'destinationAccountId'].includes(field)) {
-      setMovementRouteReviewed(false)
-    }
     setMovementDraft((current) => ({ ...current, [field]: value }))
   }
 
   function chooseMovementType(type) {
     const config = movementConfigs[type] || movementConfigs[MOVEMENT_TYPES.TRANSFER]
     const defaults = movementDefaultAccounts[type] || movementDefaultAccounts[MOVEMENT_TYPES.TRANSFER]
-    setMovementRouteReviewed(false)
+    setMovementStep(MOVEMENT_ENTRY_STEPS.AMOUNT)
     setMovementDraft((current) => ({
       ...current,
       type,
@@ -933,12 +943,30 @@ export default function MohammadLedgerApp() {
 
   function swapMovementSides() {
     if (!movementConfig.needsDestination) return
-    setMovementRouteReviewed(false)
     setMovementDraft((current) => ({
       ...current,
       sourceAccountId: current.destinationAccountId || '',
       destinationAccountId: current.sourceAccountId || '',
     }))
+  }
+
+  function nextMovementStep(step = movementStep) {
+    if (step === MOVEMENT_ENTRY_STEPS.TYPE) return MOVEMENT_ENTRY_STEPS.AMOUNT
+    if (step === MOVEMENT_ENTRY_STEPS.AMOUNT) return MOVEMENT_ENTRY_STEPS.CURRENCY
+    if (step === MOVEMENT_ENTRY_STEPS.CURRENCY) return movementConfig.needsRate ? MOVEMENT_ENTRY_STEPS.RATE : MOVEMENT_ENTRY_STEPS.SOURCE
+    if (step === MOVEMENT_ENTRY_STEPS.RATE) return MOVEMENT_ENTRY_STEPS.SOURCE
+    if (step === MOVEMENT_ENTRY_STEPS.SOURCE) return movementConfig.needsDestination ? MOVEMENT_ENTRY_STEPS.DESTINATION : MOVEMENT_ENTRY_STEPS.NOTE
+    if (step === MOVEMENT_ENTRY_STEPS.DESTINATION) return MOVEMENT_ENTRY_STEPS.NOTE
+    if (step === MOVEMENT_ENTRY_STEPS.NOTE) return MOVEMENT_ENTRY_STEPS.REVIEW
+    return MOVEMENT_ENTRY_STEPS.REVIEW
+  }
+
+  function advanceMovementStep() {
+    setMovementStep((current) => nextMovementStep(current))
+  }
+
+  function editMovementStep(step) {
+    setMovementStep(step)
   }
 
   function movementAccountsFor(role) {
@@ -974,7 +1002,7 @@ export default function MohammadLedgerApp() {
     setFeedback(movement.status === MOVEMENT_STATUSES.POSTED ? 'تم الحفظ وتحديث الأرصدة.' : 'الحركة ناقصة وتحتاج حل.')
     if (movement.status === MOVEMENT_STATUSES.POSTED) {
       setMovementDraft(emptyMovementDraft(movementDraft.type))
-      setMovementRouteReviewed(false)
+      setMovementStep(MOVEMENT_ENTRY_STEPS.TYPE)
     }
   }
 
@@ -1130,7 +1158,7 @@ export default function MohammadLedgerApp() {
   }
 
   function editReviewMovement(movement) {
-    setMovementRouteReviewed(false)
+    setMovementStep(MOVEMENT_ENTRY_STEPS.AMOUNT)
     setMovementDraft({
       type: movement.type || MOVEMENT_TYPES.TRANSFER,
       amount: movement.amount ? String(movement.amount) : '',
@@ -1423,6 +1451,16 @@ export default function MohammadLedgerApp() {
                 <b>{preview.validation.ok ? 'جاهزة' : 'ناقصة'}</b>
               </div>
 
+              {movementStep > MOVEMENT_ENTRY_STEPS.TYPE ? (
+                <section className="ml3-step is-done">
+                  <div className="ml3-step-head">
+                    <span>1</span>
+                    <strong>الحركة</strong>
+                    <button type="button" onClick={() => editMovementStep(MOVEMENT_ENTRY_STEPS.TYPE)}>تعديل</button>
+                  </div>
+                  <b className="ml3-step-summary">{movementLabels[movementDraft.type]}</b>
+                </section>
+              ) : (
               <section className="ml3-step is-open">
                 <div className="ml3-step-head">
                   <span>1</span>
@@ -1441,13 +1479,26 @@ export default function MohammadLedgerApp() {
                   ))}
                 </div>
               </section>
+              )}
 
+              {movementStep > MOVEMENT_ENTRY_STEPS.AMOUNT ? (
+                <section className="ml3-step is-done">
+                  <div className="ml3-step-head">
+                    <span>2</span>
+                    <strong>المبلغ</strong>
+                    <button type="button" onClick={() => editMovementStep(MOVEMENT_ENTRY_STEPS.AMOUNT)}>تعديل</button>
+                  </div>
+                  <b className="ml3-step-summary">{money(movementDraft.amount, movementConfig.currency || movementDraft.currency)}</b>
+                </section>
+              ) : null}
+
+              {movementStep === MOVEMENT_ENTRY_STEPS.AMOUNT ? (
               <section className="ml3-step is-open">
                 <div className="ml3-step-head">
                   <span>2</span>
                   <strong>المبلغ</strong>
                 </div>
-                <div className={`ml3-field-pair ${movementConfig.needsRate ? 'has-rate' : ''}`}>
+                <div className="ml3-field-pair is-single">
                   <label>
                     {movementConfig.amountLabel}
                     <input
@@ -1457,58 +1508,160 @@ export default function MohammadLedgerApp() {
                       placeholder="0"
                     />
                   </label>
-                  {movementConfig.currencyLocked ? (
-                    <div className="ml3-currency-lock">
-                      <span>العملة</span>
-                      <strong>{movementConfig.currencyText}</strong>
-                    </div>
-                  ) : (
-                    <label>
-                      العملة
-                      <select value={movementDraft.currency} onChange={(event) => updateMovementDraft('currency', event.target.value)}>
-                        <option value={CURRENCIES.DINAR}>دينار</option>
-                        <option value={CURRENCIES.USD}>دولار</option>
-                      </select>
-                    </label>
-                  )}
-                  {movementConfig.needsRate ? (
-                    <label>
-                      {movementConfig.rateLabel}
-                      <input
-                        inputMode="decimal"
-                        value={movementDraft.rate}
-                        onChange={(event) => updateMovementDraft('rate', event.target.value)}
-                        placeholder="7.5"
-                      />
-                    </label>
-                  ) : null}
                 </div>
+                <button type="button" className="ml3-step-next" disabled={!hasMovementAmount} onClick={advanceMovementStep}>
+                  التالي
+                </button>
               </section>
+              ) : null}
 
-              {canChooseMovementAccounts ? (
+              {movementStep > MOVEMENT_ENTRY_STEPS.CURRENCY ? (
+                <section className="ml3-step is-done">
+                  <div className="ml3-step-head">
+                    <span>3</span>
+                    <strong>العملة</strong>
+                    <button type="button" onClick={() => editMovementStep(MOVEMENT_ENTRY_STEPS.CURRENCY)}>تعديل</button>
+                  </div>
+                  <b className="ml3-step-summary">{movementConfig.currencyText || (movementDraft.currency === CURRENCIES.USD ? 'دولار' : 'دينار')}</b>
+                </section>
+              ) : null}
+
+              {movementStep === MOVEMENT_ENTRY_STEPS.CURRENCY ? (
               <section className="ml3-step is-open">
                 <div className="ml3-step-head">
                   <span>3</span>
-                  <strong>{movementConfig.routeTitle}</strong>
+                  <strong>العملة</strong>
                 </div>
-                <div className={`ml3-route-picker ${movementConfig.needsDestination ? '' : 'is-single'}`}>
+                {movementConfig.currencyLocked ? (
+                  <div className="ml3-currency-lock">
+                    <span>العملة</span>
+                    <strong>{movementConfig.currencyText}</strong>
+                  </div>
+                ) : (
+                  <label>
+                    العملة
+                    <select value={movementDraft.currency} onChange={(event) => updateMovementDraft('currency', event.target.value)}>
+                      <option value={CURRENCIES.DINAR}>دينار</option>
+                      <option value={CURRENCIES.USD}>دولار</option>
+                    </select>
+                  </label>
+                )}
+                <button type="button" className="ml3-step-next" onClick={advanceMovementStep}>
+                  التالي
+                </button>
+              </section>
+              ) : null}
+
+              {movementConfig.needsRate && movementStep > MOVEMENT_ENTRY_STEPS.RATE ? (
+                <section className="ml3-step is-done">
+                  <div className="ml3-step-head">
+                    <span>4</span>
+                    <strong>السعر</strong>
+                    <button type="button" onClick={() => editMovementStep(MOVEMENT_ENTRY_STEPS.RATE)}>تعديل</button>
+                  </div>
+                  <b className="ml3-step-summary">{Number(movementDraft.rate || 0).toLocaleString('en-US')}</b>
+                </section>
+              ) : null}
+
+              {movementConfig.needsRate && movementStep === MOVEMENT_ENTRY_STEPS.RATE ? (
+              <section className="ml3-step is-open">
+                <div className="ml3-step-head">
+                  <span>4</span>
+                  <strong>السعر</strong>
+                </div>
+                <label>
+                  {movementConfig.rateLabel}
+                  <input
+                    inputMode="decimal"
+                    value={movementDraft.rate}
+                    onChange={(event) => updateMovementDraft('rate', event.target.value)}
+                    placeholder="7.5"
+                  />
+                </label>
+                <button type="button" className="ml3-step-next" disabled={!hasMovementRate} onClick={advanceMovementStep}>
+                  التالي
+                </button>
+              </section>
+              ) : null}
+
+              {movementStep > MOVEMENT_ENTRY_STEPS.SOURCE ? (
+                <section className="ml3-step is-done">
+                  <div className="ml3-step-head">
+                    <span>{movementConfig.needsRate ? 5 : 4}</span>
+                    <strong>{movementConfig.sourceLabel}</strong>
+                    <button type="button" onClick={() => editMovementStep(MOVEMENT_ENTRY_STEPS.SOURCE)}>تعديل</button>
+                  </div>
+                  <b className="ml3-step-summary">{accountLabel(draftSourceAccount)}</b>
+                </section>
+              ) : null}
+
+              {movementStep === MOVEMENT_ENTRY_STEPS.SOURCE ? (
+              <section className="ml3-step is-open">
+                <div className="ml3-step-head">
+                  <span>{movementConfig.needsRate ? 5 : 4}</span>
+                  <strong>{movementConfig.sourceLabel}</strong>
+                </div>
+                <div className="ml3-route-picker is-single">
                   <AccountSearchSelect
                     label={movementConfig.sourceLabel}
                     value={movementDraft.sourceAccountId || ''}
                     accounts={movementAccountsFor('source')}
                     onChange={(value) => updateMovementDraft('sourceAccountId', value)}
                   />
-                  {movementConfig.needsDestination ? (
-                    <>
-                      <button type="button" className="ml3-swap" onClick={swapMovementSides}>تبديل</button>
-                      <AccountSearchSelect
-                        label={movementConfig.destinationLabel}
-                        value={movementDraft.destinationAccountId || ''}
-                        accounts={movementAccountsFor('destination')}
-                        onChange={(value) => updateMovementDraft('destinationAccountId', value)}
-                      />
-                    </>
-                  ) : null}
+                </div>
+                <button type="button" className="ml3-step-next" disabled={!movementDraft.sourceAccountId} onClick={advanceMovementStep}>
+                  التالي
+                </button>
+              </section>
+              ) : null}
+
+              {movementConfig.needsDestination && movementStep > MOVEMENT_ENTRY_STEPS.DESTINATION ? (
+                <section className="ml3-step is-done">
+                  <div className="ml3-step-head">
+                    <span>{movementConfig.needsRate ? 6 : 5}</span>
+                    <strong>{movementConfig.destinationLabel}</strong>
+                    <button type="button" onClick={() => editMovementStep(MOVEMENT_ENTRY_STEPS.DESTINATION)}>تعديل</button>
+                  </div>
+                  <b className="ml3-step-summary">{accountLabel(draftDestinationAccount)}</b>
+                </section>
+              ) : null}
+
+              {movementConfig.needsDestination && movementStep === MOVEMENT_ENTRY_STEPS.DESTINATION ? (
+              <section className="ml3-step is-open">
+                <div className="ml3-step-head">
+                  <span>{movementConfig.needsRate ? 6 : 5}</span>
+                  <strong>{movementConfig.destinationLabel}</strong>
+                </div>
+                <div className="ml3-route-picker is-single">
+                  <AccountSearchSelect
+                    label={movementConfig.destinationLabel}
+                    value={movementDraft.destinationAccountId || ''}
+                    accounts={movementAccountsFor('destination')}
+                    onChange={(value) => updateMovementDraft('destinationAccountId', value)}
+                  />
+                </div>
+                <button type="button" className="ml3-step-next" disabled={!movementDraft.destinationAccountId || movementDraft.sourceAccountId === movementDraft.destinationAccountId} onClick={advanceMovementStep}>
+                  التالي
+                </button>
+              </section>
+              ) : null}
+
+              {movementStep > MOVEMENT_ENTRY_STEPS.NOTE ? (
+                <section className="ml3-step is-done">
+                  <div className="ml3-step-head">
+                    <span>{movementConfig.needsRate ? (movementConfig.needsDestination ? 7 : 6) : (movementConfig.needsDestination ? 6 : 5)}</span>
+                    <strong>ملاحظة</strong>
+                    <button type="button" onClick={() => editMovementStep(MOVEMENT_ENTRY_STEPS.NOTE)}>تعديل</button>
+                  </div>
+                  <b className="ml3-step-summary">{movementDraft.note || 'بدون ملاحظة'}</b>
+                </section>
+              ) : null}
+
+              {movementStep === MOVEMENT_ENTRY_STEPS.NOTE ? (
+              <section className="ml3-step is-open">
+                <div className="ml3-step-head">
+                  <span>{movementConfig.needsRate ? (movementConfig.needsDestination ? 7 : 6) : (movementConfig.needsDestination ? 6 : 5)}</span>
+                  <strong>ملاحظة</strong>
                 </div>
                 <label>
                   ملاحظة
@@ -1518,12 +1671,7 @@ export default function MohammadLedgerApp() {
                     placeholder="اختياري"
                   />
                 </label>
-                <button
-                  type="button"
-                  className="ml3-step-next"
-                  disabled={!hasMovementAccounts}
-                  onClick={() => setMovementRouteReviewed(true)}
-                >
+                <button type="button" className="ml3-step-next" onClick={advanceMovementStep}>
                   مراجعة
                 </button>
               </section>
@@ -1532,7 +1680,7 @@ export default function MohammadLedgerApp() {
               {canReviewMovement ? (
               <section className="ml3-step ml3-step--final is-open">
                 <div className="ml3-step-head">
-                  <span>4</span>
+                  <span>{movementConfig.needsRate ? (movementConfig.needsDestination ? 8 : 7) : (movementConfig.needsDestination ? 7 : 6)}</span>
                   <strong>{preview.validation.ok ? 'راجع التأثير' : 'أكمل الناقص'}</strong>
                 </div>
                 <div className={`ml3-preview ${preview.validation.ok ? 'is-ok' : 'is-review'}`}>
