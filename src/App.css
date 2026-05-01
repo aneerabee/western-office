@@ -5650,14 +5650,20 @@ tbody tr:hover {
 
 .ml3-step {
   display: grid;
-  gap: 7px;
-  border-radius: 12px;
-  padding: 8px;
-  background: linear-gradient(90deg, color-mix(in srgb, var(--ml3-flow-tone) 8%, #ffffff), #ffffff 55%);
-  border: 1px solid color-mix(in srgb, var(--ml3-flow-tone) 20%, #ffffff);
+  gap: 9px;
+  border-radius: 14px;
+  padding: 10px;
+  --ml3-step-tone: var(--ml3-flow-tone);
+  --ml3-step-soft: color-mix(in srgb, var(--ml3-step-tone) 10%, #ffffff);
+  --ml3-step-ink: color-mix(in srgb, var(--ml3-step-tone) 82%, #17211c);
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--ml3-step-tone) 15%, #ffffff), #ffffff 62%),
+    #ffffff;
+  border: 1px solid color-mix(in srgb, var(--ml3-step-tone) 34%, #ffffff);
   animation: ml3-rise 0.22s ease both;
   position: relative;
   overflow: hidden;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.55);
 }
 
 .ml3-step::before {
@@ -5665,86 +5671,129 @@ tbody tr:hover {
   position: absolute;
   inset-block: 0;
   inset-inline-start: 0;
-  width: 5px;
-  background: var(--ml3-flow-tone);
+  width: 7px;
+  background: var(--ml3-step-tone);
+}
+
+.ml3-step--type {
+  --ml3-step-tone: #25352d;
+}
+
+.ml3-step--amount {
+  --ml3-step-tone: #1768ac;
+}
+
+.ml3-step--currency {
+  --ml3-step-tone: #6f4aa8;
+}
+
+.ml3-step--rate {
+  --ml3-step-tone: #a86425;
+}
+
+.ml3-step--source {
+  --ml3-step-tone: #0f7b62;
+}
+
+.ml3-step--destination {
+  --ml3-step-tone: #2b5d9a;
+}
+
+.ml3-step--note {
+  --ml3-step-tone: #65746d;
+}
+
+.ml3-step--review {
+  --ml3-step-tone: #1f7a54;
 }
 
 .ml3-step--final {
-  background: linear-gradient(90deg, color-mix(in srgb, var(--ml3-flow-tone) 14%, #ffffff), #ffffff 60%);
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--ml3-step-tone) 20%, #ffffff), #ffffff 60%),
+    #ffffff;
 }
 
 .ml3-step:not(:last-child)::after {
   content: "";
   position: absolute;
-  inset-inline-start: 18px;
-  bottom: -10px;
-  width: 3px;
-  height: 10px;
-  background: color-mix(in srgb, var(--ml3-flow-tone) 52%, #cbd8ca);
+  inset-inline-start: 22px;
+  bottom: -12px;
+  width: 4px;
+  height: 12px;
+  background: color-mix(in srgb, var(--ml3-step-tone) 62%, #cbd8ca);
   border-radius: 999px;
 }
 
 .ml3-step-head {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   min-width: 0;
-  color: #25352d;
+  color: var(--ml3-step-ink);
 }
 
 .ml3-step-head span {
   display: inline-grid;
   place-items: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 999px;
-  background: var(--ml3-flow-tone);
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  background: var(--ml3-step-tone);
   color: #ffffff;
-  font-size: 0.68rem;
+  font-size: 0.92rem;
   font-weight: 950;
   flex: 0 0 auto;
+  box-shadow: 0 7px 14px color-mix(in srgb, var(--ml3-step-tone) 24%, transparent);
 }
 
 .ml3-step-head strong {
-  font-size: 0.78rem;
+  font-size: 1rem;
   line-height: 1.1;
+  font-weight: 950;
 }
 
 .ml3-step-head button {
   margin-inline-start: auto;
   border: 0;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--ml3-flow-tone) 12%, #ffffff);
-  color: var(--ml3-flow-ink);
-  padding: 3px 8px;
+  background: color-mix(in srgb, var(--ml3-step-tone) 12%, #ffffff);
+  color: var(--ml3-step-ink);
+  padding: 5px 10px;
   font: inherit;
-  font-size: 0.68rem;
+  font-size: 0.78rem;
   font-weight: 950;
   cursor: pointer;
 }
 
 .ml3-step.is-done {
   grid-template-columns: 1fr;
-  background: #ffffff;
-  border-color: color-mix(in srgb, var(--ml3-flow-tone) 18%, #ffffff);
-  opacity: 0.92;
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--ml3-step-tone) 8%, #ffffff), #ffffff 58%),
+    #ffffff;
+  border-color: color-mix(in srgb, var(--ml3-step-tone) 24%, #ffffff);
+  opacity: 1;
 }
 
 .ml3-step.is-done .ml3-step-head span {
-  background: #1f7a54;
+  background: color-mix(in srgb, var(--ml3-step-tone) 76%, #25352d);
+  width: 26px;
+  height: 26px;
+  border-radius: 9px;
+  font-size: 0.78rem;
 }
 
 .ml3-step-summary {
   display: block;
   min-width: 0;
-  border-radius: 9px;
-  background: color-mix(in srgb, var(--ml3-flow-tone) 10%, #ffffff);
-  color: var(--ml3-flow-ink);
-  padding: 5px 8px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--ml3-step-tone) 12%, #ffffff);
+  color: var(--ml3-step-ink);
+  padding: 7px 9px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 0.8rem;
+  font-size: 0.92rem;
+  line-height: 1.15;
 }
 
 .ml3-entry-head b {
@@ -5757,7 +5806,7 @@ tbody tr:hover {
 .ml3-entry-head h2,
 .ml3-panel-head h2,
 .ml3-add-account h3 {
-  font-size: 1rem;
+  font-size: 1.08rem;
   line-height: 1.15;
 }
 
@@ -5778,7 +5827,7 @@ tbody tr:hover {
   padding: 5px 6px;
   font: inherit;
   font-weight: 950;
-  font-size: 0.82rem;
+  font-size: 0.9rem;
   cursor: pointer;
   transition:
     transform 0.15s ease,
@@ -5805,6 +5854,7 @@ tbody tr:hover {
   gap: 2px;
   text-align: inherit;
   align-content: center;
+  min-height: 38px;
 }
 
 .ml3-action-choice strong,
@@ -6011,10 +6061,10 @@ tbody tr:hover {
   border: 0;
   border-radius: 10px;
   min-height: 30px;
-  background: var(--ml3-flow-tone);
+  background: var(--ml3-step-tone);
   color: #ffffff;
   font: inherit;
-  font-size: 0.8rem;
+  font-size: 0.92rem;
   font-weight: 950;
   cursor: pointer;
 }
@@ -7307,19 +7357,39 @@ tbody tr:hover {
   }
 
   .ml3-step {
-    gap: 3px;
-    padding: 4px;
-    border-radius: 10px;
+    gap: 7px;
+    padding: 8px;
+    border-radius: 12px;
+  }
+
+  .ml3-step::before {
+    width: 6px;
   }
 
   .ml3-step-head span {
-    width: 17px;
-    height: 17px;
-    font-size: 0.62rem;
+    width: 27px;
+    height: 27px;
+    font-size: 0.84rem;
+    border-radius: 9px;
   }
 
   .ml3-step-head strong {
-    font-size: 0.72rem;
+    font-size: 0.96rem;
+  }
+
+  .ml3-step-head button {
+    padding: 4px 9px;
+    font-size: 0.76rem;
+  }
+
+  .ml3-step-summary {
+    font-size: 0.9rem;
+    padding: 6px 8px;
+  }
+
+  .ml3-quick-actions button,
+  .ml3-step-next {
+    font-size: 0.88rem;
   }
 
   .ml3-entry-card label,

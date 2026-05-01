@@ -1452,7 +1452,7 @@ export default function MohammadLedgerApp() {
               </div>
 
               {movementStep > MOVEMENT_ENTRY_STEPS.TYPE ? (
-                <section className="ml3-step is-done">
+                <section className="ml3-step ml3-step--type is-done">
                   <div className="ml3-step-head">
                     <span>1</span>
                     <strong>الحركة</strong>
@@ -1461,7 +1461,7 @@ export default function MohammadLedgerApp() {
                   <b className="ml3-step-summary">{movementLabels[movementDraft.type]}</b>
                 </section>
               ) : (
-              <section className="ml3-step is-open">
+              <section className="ml3-step ml3-step--type is-open">
                 <div className="ml3-step-head">
                   <span>1</span>
                   <strong>نوع الحركة</strong>
@@ -1482,7 +1482,7 @@ export default function MohammadLedgerApp() {
               )}
 
               {movementStep > MOVEMENT_ENTRY_STEPS.AMOUNT ? (
-                <section className="ml3-step is-done">
+                <section className="ml3-step ml3-step--amount is-done">
                   <div className="ml3-step-head">
                     <span>2</span>
                     <strong>المبلغ</strong>
@@ -1493,7 +1493,7 @@ export default function MohammadLedgerApp() {
               ) : null}
 
               {movementStep === MOVEMENT_ENTRY_STEPS.AMOUNT ? (
-              <section className="ml3-step is-open">
+              <section className="ml3-step ml3-step--amount is-open">
                 <div className="ml3-step-head">
                   <span>2</span>
                   <strong>المبلغ</strong>
@@ -1516,7 +1516,7 @@ export default function MohammadLedgerApp() {
               ) : null}
 
               {movementStep > MOVEMENT_ENTRY_STEPS.CURRENCY ? (
-                <section className="ml3-step is-done">
+                <section className="ml3-step ml3-step--currency is-done">
                   <div className="ml3-step-head">
                     <span>3</span>
                     <strong>العملة</strong>
@@ -1527,7 +1527,7 @@ export default function MohammadLedgerApp() {
               ) : null}
 
               {movementStep === MOVEMENT_ENTRY_STEPS.CURRENCY ? (
-              <section className="ml3-step is-open">
+              <section className="ml3-step ml3-step--currency is-open">
                 <div className="ml3-step-head">
                   <span>3</span>
                   <strong>العملة</strong>
@@ -1553,7 +1553,7 @@ export default function MohammadLedgerApp() {
               ) : null}
 
               {movementConfig.needsRate && movementStep > MOVEMENT_ENTRY_STEPS.RATE ? (
-                <section className="ml3-step is-done">
+                <section className="ml3-step ml3-step--rate is-done">
                   <div className="ml3-step-head">
                     <span>4</span>
                     <strong>السعر</strong>
@@ -1564,7 +1564,7 @@ export default function MohammadLedgerApp() {
               ) : null}
 
               {movementConfig.needsRate && movementStep === MOVEMENT_ENTRY_STEPS.RATE ? (
-              <section className="ml3-step is-open">
+              <section className="ml3-step ml3-step--rate is-open">
                 <div className="ml3-step-head">
                   <span>4</span>
                   <strong>السعر</strong>
@@ -1585,7 +1585,7 @@ export default function MohammadLedgerApp() {
               ) : null}
 
               {movementStep > MOVEMENT_ENTRY_STEPS.SOURCE ? (
-                <section className="ml3-step is-done">
+                <section className="ml3-step ml3-step--source is-done">
                   <div className="ml3-step-head">
                     <span>{movementConfig.needsRate ? 5 : 4}</span>
                     <strong>{movementConfig.sourceLabel}</strong>
@@ -1596,7 +1596,7 @@ export default function MohammadLedgerApp() {
               ) : null}
 
               {movementStep === MOVEMENT_ENTRY_STEPS.SOURCE ? (
-              <section className="ml3-step is-open">
+              <section className="ml3-step ml3-step--source is-open">
                 <div className="ml3-step-head">
                   <span>{movementConfig.needsRate ? 5 : 4}</span>
                   <strong>{movementConfig.sourceLabel}</strong>
@@ -1616,7 +1616,7 @@ export default function MohammadLedgerApp() {
               ) : null}
 
               {movementConfig.needsDestination && movementStep > MOVEMENT_ENTRY_STEPS.DESTINATION ? (
-                <section className="ml3-step is-done">
+                <section className="ml3-step ml3-step--destination is-done">
                   <div className="ml3-step-head">
                     <span>{movementConfig.needsRate ? 6 : 5}</span>
                     <strong>{movementConfig.destinationLabel}</strong>
@@ -1627,7 +1627,7 @@ export default function MohammadLedgerApp() {
               ) : null}
 
               {movementConfig.needsDestination && movementStep === MOVEMENT_ENTRY_STEPS.DESTINATION ? (
-              <section className="ml3-step is-open">
+              <section className="ml3-step ml3-step--destination is-open">
                 <div className="ml3-step-head">
                   <span>{movementConfig.needsRate ? 6 : 5}</span>
                   <strong>{movementConfig.destinationLabel}</strong>
@@ -1647,7 +1647,7 @@ export default function MohammadLedgerApp() {
               ) : null}
 
               {movementStep > MOVEMENT_ENTRY_STEPS.NOTE ? (
-                <section className="ml3-step is-done">
+                <section className="ml3-step ml3-step--note is-done">
                   <div className="ml3-step-head">
                     <span>{movementConfig.needsRate ? (movementConfig.needsDestination ? 7 : 6) : (movementConfig.needsDestination ? 6 : 5)}</span>
                     <strong>ملاحظة</strong>
@@ -1658,7 +1658,7 @@ export default function MohammadLedgerApp() {
               ) : null}
 
               {movementStep === MOVEMENT_ENTRY_STEPS.NOTE ? (
-              <section className="ml3-step is-open">
+              <section className="ml3-step ml3-step--note is-open">
                 <div className="ml3-step-head">
                   <span>{movementConfig.needsRate ? (movementConfig.needsDestination ? 7 : 6) : (movementConfig.needsDestination ? 6 : 5)}</span>
                   <strong>ملاحظة</strong>
@@ -1678,7 +1678,7 @@ export default function MohammadLedgerApp() {
               ) : null}
 
               {canReviewMovement ? (
-              <section className="ml3-step ml3-step--final is-open">
+              <section className="ml3-step ml3-step--review ml3-step--final is-open">
                 <div className="ml3-step-head">
                   <span>{movementConfig.needsRate ? (movementConfig.needsDestination ? 8 : 7) : (movementConfig.needsDestination ? 7 : 6)}</span>
                   <strong>{preview.validation.ok ? 'راجع التأثير' : 'أكمل الناقص'}</strong>
