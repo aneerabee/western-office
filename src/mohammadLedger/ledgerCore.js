@@ -150,6 +150,9 @@ export function validateMovement(movement, accounts = []) {
     if (account.type === ACCOUNT_TYPES.SUMMARY) {
       errors.push({ field, message: 'حسابات الملخص لا تستخدم كطرف حركة.' })
     }
+    if (account.status === ACCOUNT_STATUSES.INACTIVE) {
+      errors.push({ field, message: 'الحساب مخفي ولا يستخدم كطرف حركة.' })
+    }
     if (account.status === ACCOUNT_STATUSES.NEEDS_REVIEW) {
       warnings.push({ field, message: 'الحساب يحتاج مراجعة قبل الاعتماد النهائي.' })
     }
@@ -215,6 +218,7 @@ export function summarizeBalances(accounts = [], movements = []) {
   const balances = new Map()
 
   for (const account of accounts) {
+    if (account.status === ACCOUNT_STATUSES.INACTIVE) continue
     balances.set(account.id, {
       account,
       dinar: 0,

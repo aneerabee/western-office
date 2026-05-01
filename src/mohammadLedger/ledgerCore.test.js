@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ACCOUNT_TYPES, mohammadAccountCatalog, mohammadSummaryAccounts } from './accountCatalog'
+import { ACCOUNT_STATUSES, ACCOUNT_TYPES, mohammadAccountCatalog, mohammadSummaryAccounts } from './accountCatalog'
 import {
   CURRENCIES,
   MOVEMENT_STATUSES,
@@ -120,6 +120,43 @@ describe('mohammad ledger core', () => {
 
     expect(movement.status).toBe(MOVEMENT_STATUSES.NEEDS_REVIEW)
     expect(movement.validation.errors.some((error) => error.message.includes('نفس الاسم'))).toBe(true)
+  })
+
+  it('keeps inactive accounts out of balances and posting endpoints', () => {
+    const accounts = [
+      createAccount({
+        id: 'hidden-review',
+        ownerName: 'مخفي',
+        subAccountName: 'كاش',
+        type: ACCOUNT_TYPES.PERSON,
+        valueKind: 'receivable',
+        openingDinar: 500,
+        status: ACCOUNT_STATUSES.INACTIVE,
+      }),
+      createAccount({
+        id: 'active-cash',
+        ownerName: 'أنا',
+        subAccountName: 'كاش',
+        type: ACCOUNT_TYPES.CASH,
+        valueKind: 'cash',
+      }),
+    ]
+    const openings = createOpeningMovements(accounts)
+    const balances = summarizeBalances(accounts, openings)
+    const movement = postMovement(
+      {
+        type: MOVEMENT_TYPES.TRANSFER,
+        amount: 100,
+        currency: CURRENCIES.DINAR,
+        sourceAccountId: 'active-cash',
+        destinationAccountId: 'hidden-review',
+      },
+      accounts,
+    )
+
+    expect(balances.some((bucket) => bucket.account.id === 'hidden-review')).toBe(false)
+    expect(movement.status).toBe(MOVEMENT_STATUSES.NEEDS_REVIEW)
+    expect(movement.validation.errors.some((error) => error.message.includes('مخفي'))).toBe(true)
   })
 
   it('supports voiding a posted movement without deleting it', () => {

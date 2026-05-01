@@ -1236,7 +1236,13 @@ export default function MohammadLedgerApp() {
   function disableAccount(accountId) {
     setAccounts((current) =>
       current.map((account) =>
-        account.id === accountId ? { ...account, status: ACCOUNT_STATUSES.INACTIVE } : account,
+        account.id === accountId
+          ? {
+              ...account,
+              status: ACCOUNT_STATUSES.INACTIVE,
+              disabledAt: new Date().toISOString(),
+            }
+          : account,
       ),
     )
     setFeedback('تم إخفاء الحساب.')
