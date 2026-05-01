@@ -183,10 +183,10 @@ const accountClassificationOptions = accountPresets.map((preset) => ({
 }))
 
 const accountGroupTabs = [
-  { key: 'people', label: 'الناس', title: 'الناس', subtitle: 'كل الأشخاص والجهات، حتى الحسابات المسكرة تظهر هنا للتأكد.' },
-  { key: 'money', label: 'مالي', title: 'أماكن مالي', subtitle: 'الكاش والمصرفي الخاص بي فقط.' },
-  { key: 'assets', label: 'أشياء', title: 'أشياء لها قيمة', subtitle: 'أصول وممتلكات.' },
-  { key: 'expenses', label: 'مصروف', title: 'المصروف', subtitle: 'فلوس خرجت نهائيًا.' },
+  { key: 'people', label: 'الناس + مالي', title: 'الناس + مالي' },
+  { key: 'assets', label: 'أصول', title: 'الأصول' },
+  { key: 'expenses', label: 'مصروف', title: 'المصروف' },
+  { key: 'review', label: 'مراجعة', title: 'مراجعة' },
 ]
 
 const accountTypeLabels = {
@@ -337,20 +337,49 @@ function visualKind(account) {
   if (account.valueKind === VALUE_KINDS.BANK) return 'bank'
   if (account.valueKind === VALUE_KINDS.EXPENSE) return 'expense'
   if (account.valueKind === VALUE_KINDS.ASSET) return 'asset'
+  if (account.valueKind === VALUE_KINDS.RECEIVABLE && /مصرف|بنك|حساب/i.test(account.subAccountName || '')) return 'person-bank'
+  if (account.valueKind === VALUE_KINDS.RECEIVABLE && /دولار|usd/i.test(account.subAccountName || '')) return 'person-usd'
   return 'person'
+}
+
+function accountKindText(account) {
+  if (!account) return ''
+  if (account.valueKind === VALUE_KINDS.CASH) return 'مالي كاش'
+  if (account.valueKind === VALUE_KINDS.BANK) return 'مالي مصرفي'
+  if (account.valueKind === VALUE_KINDS.ASSET) return 'أصل'
+  if (account.valueKind === VALUE_KINDS.EXPENSE) return 'مصروف'
+  if (account.status === ACCOUNT_STATUSES.NEEDS_REVIEW || account.valueKind === VALUE_KINDS.REVIEW) return 'مراجعة'
+  return account.subAccountName || 'شخص'
+}
+
+function sameLogicalAccount(left, right) {
+  if (!left || !right) return false
+  return (
+    left.id === right.id ||
+    (
+      String(left.ownerName || '').trim() === String(right.ownerName || '').trim() &&
+      String(left.subAccountName || '').trim() === String(right.subAccountName || '').trim()
+    )
+  )
+}
+
+function compareBalanceBuckets(a, b) {
+  const aActive = Math.abs(a.dinar) > 0.000001 || Math.abs(a.usd) > 0.000001
+  const bActive = Math.abs(b.dinar) > 0.000001 || Math.abs(b.usd) > 0.000001
+  return Number(bActive) - Number(aActive) || Math.abs(b.dinar) - Math.abs(a.dinar) || Math.abs(b.usd) - Math.abs(a.usd)
 }
 
 function AccountRow({ bucket, muted = false, onConfirm, onDisable, onOpen }) {
   const { account, dinar, usd } = bucket
   const balanceTone = dinar > 0 ? 'is-positive' : dinar < 0 ? 'is-negative' : 'is-zero'
   return (
-    <article className={`ml3-account-row ml3-account-row--${visualKind(account)} ${muted ? 'is-muted' : ''}`}>
+    <article className={`ml3-account-row ml3-account-row--${visualKind(account)} ${balanceTone} ${muted ? 'is-muted' : ''}`}>
       <button type="button" className="ml3-account-main" onClick={() => onOpen?.(account.id)}>
         <strong>{account.ownerName}</strong>
         <span>{account.subAccountName}</span>
       </button>
       <div className="ml3-account-meta">
-        <span>{accountTypeLabels[account.type] || account.type}</span>
+        <span>{accountKindText(account)}</span>
         {account.status === ACCOUNT_STATUSES.NEEDS_REVIEW ? <b>تأكيد</b> : null}
       </div>
       <div className={`ml3-account-values ${balanceTone}`}>
@@ -432,11 +461,11 @@ function AccountSearchSelect({ label, value, accounts, onChange, allowEmpty = tr
       if (quickFilter) return account.ownerName?.startsWith(quickFilter)
       return true
     })
-    .slice(0, 18)
+    .sort((a, b) => accountLabel(a).localeCompare(accountLabel(b), 'ar'))
   const visibleAccounts = selectedAccount && !filteredAccounts.some((account) => account.id === selectedAccount.id)
     ? [selectedAccount, ...filteredAccounts]
     : filteredAccounts
-  const resultAccounts = visibleAccounts.slice(0, normalizedQuery ? 9 : 7)
+  const resultAccounts = visibleAccounts
 
   function chooseAccount(accountId) {
     onChange(accountId)
@@ -451,13 +480,14 @@ function AccountSearchSelect({ label, value, accounts, onChange, allowEmpty = tr
       <div className="ml3-picker-head">
         <strong>{label}</strong>
       </div>
-      <div className={`ml3-picked-account ${selectedAccount ? 'is-selected' : ''}`}>
+      <div className={`ml3-picked-account ${selectedAccount ? `is-selected ml3-picked-account--${visualKind(selectedAccount)}` : ''}`}>
         <div>
           <span>{selectedAccount ? 'تم الاختيار' : 'اختر حساب'}</span>
           <strong>{selectedAccount ? accountLabel(selectedAccount) : 'ابحث أو اختر من القائمة'}</strong>
         </div>
         {selectedAccount ? (
           <div className="ml3-picked-actions">
+            <b>{accountKindText(selectedAccount)}</b>
             <button type="button" onClick={() => setIsChanging(true)}>تغيير</button>
             {allowEmpty ? <button type="button" onClick={() => chooseAccount(null)}>مسح</button> : null}
           </div>
@@ -494,13 +524,13 @@ function AccountSearchSelect({ label, value, accounts, onChange, allowEmpty = tr
               <button
                 type="button"
                 key={account.id}
-                className={account.id === value ? 'is-selected' : ''}
+                className={`ml3-picker-option--${visualKind(account)} ${account.id === value ? 'is-selected' : ''}`}
                 onClick={() => chooseAccount(account.id)}
               >
                 <span className={`ml3-picker-dot ml3-picker-dot--${visualKind(account)}`} aria-hidden="true" />
                 <strong>{account.ownerName}</strong>
                 <span>{account.subAccountName}</span>
-                <b>{accountTypeLabels[account.type] || account.type}</b>
+                <b>{accountKindText(account)}</b>
               </button>
             ))}
             {normalizedQuery && resultAccounts.length === 0 ? <p>لا توجد نتيجة</p> : null}
@@ -698,24 +728,11 @@ function ReviewAccountCard({ bucket, activeAccounts, onResolve, onMerge, onDisab
           <input name="subAccountName" defaultValue={account.subAccountName} />
         </label>
         <label>
-          نوع الحساب
-          <select name="type" defaultValue={account.type === ACCOUNT_TYPES.REVIEW ? ACCOUNT_TYPES.PERSON : account.type}>
-            <option value={ACCOUNT_TYPES.PERSON}>شخص / جهة</option>
-            <option value={ACCOUNT_TYPES.CASH}>كاش</option>
-            <option value={ACCOUNT_TYPES.BANK}>مصرف</option>
-            <option value={ACCOUNT_TYPES.EXPENSE}>مصروف</option>
-            <option value={ACCOUNT_TYPES.ASSET}>أصل</option>
-            <option value={ACCOUNT_TYPES.PROJECT}>مشروع</option>
-          </select>
-        </label>
-        <label>
-          طريقة القراءة
-          <select name="valueKind" defaultValue={account.valueKind === VALUE_KINDS.REVIEW ? VALUE_KINDS.RECEIVABLE : account.valueKind}>
-            <option value={VALUE_KINDS.RECEIVABLE}>دين / رصيد شخص</option>
-            <option value={VALUE_KINDS.CASH}>مال كاش</option>
-            <option value={VALUE_KINDS.BANK}>مال مصرفي</option>
-            <option value={VALUE_KINDS.EXPENSE}>مصروف نهائي</option>
-            <option value={VALUE_KINDS.ASSET}>أصل / قيمة</option>
+          التصنيف
+          <select name="classification" defaultValue={classificationValue(account)}>
+            {accountClassificationOptions.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
           </select>
         </label>
         <label className="ml3-decision-wide">
@@ -758,24 +775,11 @@ function ExternalAccountCard({ account, onCreate }) {
           <input name="subAccountName" defaultValue={account.subAccountName} />
         </label>
         <label>
-          نوع الحساب
-          <select name="type" defaultValue={ACCOUNT_TYPES.PERSON}>
-            <option value={ACCOUNT_TYPES.PERSON}>شخص / جهة</option>
-            <option value={ACCOUNT_TYPES.CASH}>كاش</option>
-            <option value={ACCOUNT_TYPES.BANK}>مصرف</option>
-            <option value={ACCOUNT_TYPES.EXPENSE}>مصروف</option>
-            <option value={ACCOUNT_TYPES.ASSET}>أصل</option>
-            <option value={ACCOUNT_TYPES.PROJECT}>مشروع</option>
-          </select>
-        </label>
-        <label>
-          طريقة القراءة
-          <select name="valueKind" defaultValue={VALUE_KINDS.RECEIVABLE}>
-            <option value={VALUE_KINDS.RECEIVABLE}>دين / رصيد شخص</option>
-            <option value={VALUE_KINDS.CASH}>مال كاش</option>
-            <option value={VALUE_KINDS.BANK}>مال مصرفي</option>
-            <option value={VALUE_KINDS.EXPENSE}>مصروف نهائي</option>
-            <option value={VALUE_KINDS.ASSET}>أصل / قيمة</option>
+          التصنيف
+          <select name="classification" defaultValue={`${ACCOUNT_TYPES.PERSON}|${VALUE_KINDS.RECEIVABLE}`}>
+            {accountClassificationOptions.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
           </select>
         </label>
         <div className="ml3-decision-actions">
@@ -929,7 +933,7 @@ export default function MohammadLedgerApp() {
       else if (kind === VALUE_KINDS.EXPENSE) groups.expenses.push(bucket)
     }
     for (const key of Object.keys(groups)) {
-      groups[key].sort((a, b) => Number(nonZero(b)) - Number(nonZero(a)) || Math.abs(b.dinar) - Math.abs(a.dinar))
+      groups[key].sort(compareBalanceBuckets)
     }
     return groups
   }, [balances])
@@ -975,14 +979,16 @@ export default function MohammadLedgerApp() {
   const hasMovementAmount = Number.isFinite(normalizedDraft.amount) && normalizedDraft.amount > 0
   const hasMovementRate = !movementConfig.needsRate || (Number.isFinite(normalizedDraft.rate) && normalizedDraft.rate > 0)
   const canChooseMovementAccounts = hasMovementAmount && hasMovementRate
+  const selectedSourceAccount = accountById.get(movementDraft.sourceAccountId)
+  const selectedDestinationAccount = accountById.get(movementDraft.destinationAccountId)
   const hasMovementAccounts =
     Boolean(movementDraft.sourceAccountId) &&
     (!movementConfig.needsDestination || Boolean(movementDraft.destinationAccountId)) &&
-    (!movementConfig.needsDestination || movementDraft.sourceAccountId !== movementDraft.destinationAccountId)
+    (!movementConfig.needsDestination || !sameLogicalAccount(selectedSourceAccount, selectedDestinationAccount))
   const canReviewMovement = canChooseMovementAccounts && hasMovementAccounts && movementStep >= MOVEMENT_ENTRY_STEPS.REVIEW
   const selectedBucket = balances.find((bucket) => bucket.account.id === selectedAccountId) || null
-  const draftSourceAccount = accountById.get(movementDraft.sourceAccountId)
-  const draftDestinationAccount = accountById.get(movementDraft.destinationAccountId)
+  const draftSourceAccount = selectedSourceAccount
+  const draftDestinationAccount = selectedDestinationAccount
   useEffect(() => {
     if (typeof window === 'undefined') return
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ accounts, movements, savedAt: new Date().toISOString() }))
@@ -1050,12 +1056,22 @@ export default function MohammadLedgerApp() {
       account.status === ACCOUNT_STATUSES.ACTIVE
     const moneyOrPerson = activeAccounts.filter(isPostingAccount)
     const accountsWithUsd = moneyOrPerson.filter((account) => Math.abs(balanceByAccountId.get(account.id)?.usd || 0) > 0.000001)
+    const sourceAccount = accountById.get(movementDraft.sourceAccountId)
+    const destinationAccount = accountById.get(movementDraft.destinationAccountId)
+    const removeLogicalDuplicate = (list, compareAccount) =>
+      compareAccount ? list.filter((account) => !sameLogicalAccount(account, compareAccount)) : list
 
     if (movementDraft.type === MOVEMENT_TYPES.USD_SALE && role === 'source') {
       return accountsWithUsd.length ? accountsWithUsd : moneyOrPerson
     }
     if (movementDraft.type === MOVEMENT_TYPES.USD_PURCHASE && role === 'destination') {
-      return accountsWithUsd.length ? accountsWithUsd : moneyOrPerson
+      return removeLogicalDuplicate(accountsWithUsd.length ? accountsWithUsd : moneyOrPerson, sourceAccount)
+    }
+    if (role === 'destination') {
+      return removeLogicalDuplicate(moneyOrPerson, sourceAccount)
+    }
+    if (role === 'source') {
+      return removeLogicalDuplicate(moneyOrPerson, destinationAccount)
     }
     return moneyOrPerson
   }
@@ -1126,11 +1142,12 @@ export default function MohammadLedgerApp() {
   function resolveReviewAccount(event, accountId) {
     event.preventDefault()
     const formData = new FormData(event.currentTarget)
+    const classification = parseClassification(formData.get('classification'))
     const nextAccount = {
       ownerName: String(formData.get('ownerName') || '').trim(),
       subAccountName: String(formData.get('subAccountName') || '').trim(),
-      type: String(formData.get('type') || ACCOUNT_TYPES.PERSON),
-      valueKind: String(formData.get('valueKind') || VALUE_KINDS.RECEIVABLE),
+      type: classification.type,
+      valueKind: classification.valueKind,
       notes: String(formData.get('notes') || '').trim(),
     }
 
@@ -1215,11 +1232,12 @@ export default function MohammadLedgerApp() {
   function addExternalAccount(event, externalAccount) {
     event.preventDefault()
     const formData = new FormData(event.currentTarget)
+    const classification = parseClassification(formData.get('classification'))
     const account = createAccount({
       ownerName: externalAccount.ownerName,
       subAccountName: String(formData.get('subAccountName') || externalAccount.subAccountName).trim(),
-      type: String(formData.get('type') || ACCOUNT_TYPES.PERSON),
-      valueKind: String(formData.get('valueKind') || VALUE_KINDS.RECEIVABLE),
+      type: classification.type,
+      valueKind: classification.valueKind,
       notes: externalAccount.notes,
     })
     const validation = validateAccount(account, accounts)
@@ -1268,13 +1286,23 @@ export default function MohammadLedgerApp() {
 
   function renderAccountsSection() {
     const activeGroup = accountGroupTabs.find((group) => group.key === activeAccountGroup) || accountGroupTabs[0]
-    const rows = balancesByKind[activeGroup.key] || []
+    const moneyRows = balancesByKind.money || []
+    const peopleRows = balancesByKind.people || []
+    const peoplePositive = peopleRows.filter((bucket) => bucket.dinar > 0.000001).sort(compareBalanceBuckets)
+    const peopleNegative = peopleRows.filter((bucket) => bucket.dinar < -0.000001).sort(compareBalanceBuckets)
+    const peopleZero = peopleRows.filter((bucket) => Math.abs(bucket.dinar) <= 0.000001 && Math.abs(bucket.usd) <= 0.000001).sort(compareBalanceBuckets)
+    const accountRowsByGroup = {
+      people: [...moneyRows, ...peoplePositive, ...peopleNegative, ...peopleZero],
+      assets: balancesByKind.assets || [],
+      expenses: balancesByKind.expenses || [],
+      review: balancesByKind.review || [],
+    }
+    const rows = accountRowsByGroup[activeGroup.key] || []
     return (
       <section className="ml3-panel">
         <div className="ml3-panel-head">
           <div>
             <h2>الأرصدة</h2>
-            <p>اختر نوع الحساب، ثم اضغط على الاسم لفتح تفاصيله وحركاته.</p>
           </div>
           <span>{balances.length}</span>
         </div>
@@ -1287,17 +1315,25 @@ export default function MohammadLedgerApp() {
               onClick={() => setActiveAccountGroup(group.key)}
             >
               <strong>{group.label}</strong>
-              <span>{balancesByKind[group.key]?.length || 0}</span>
+              <span>{accountRowsByGroup[group.key]?.length || 0}</span>
             </button>
           ))}
         </div>
-        <AccountList
-          title={activeGroup.title}
-          subtitle={activeGroup.subtitle}
-          rows={rows}
-          onOpen={setSelectedAccountId}
-          embedded
-        />
+        {activeGroup.key === 'people' ? (
+          <div className="ml3-account-sections">
+            <AccountList title="مالي" rows={moneyRows} onOpen={setSelectedAccountId} embedded />
+            <AccountList title="أقبض منهم" rows={peoplePositive} onOpen={setSelectedAccountId} embedded />
+            <AccountList title="أدفع لهم" rows={peopleNegative} onOpen={setSelectedAccountId} embedded />
+            <AccountList title="صفر" rows={peopleZero} onOpen={setSelectedAccountId} embedded />
+          </div>
+        ) : (
+          <AccountList
+            title={activeGroup.title}
+            rows={rows}
+            onOpen={setSelectedAccountId}
+            embedded
+          />
+        )}
       </section>
     )
   }
@@ -1312,15 +1348,14 @@ export default function MohammadLedgerApp() {
         <section className="ml3-panel">
           <div className="ml3-panel-head">
             <div>
-              <h2>مشاكل تحتاج حل</h2>
-              <p>أصلحها قبل اعتمادها.</p>
+              <h2>مراجعة</h2>
             </div>
             <span>{balancesByKind.review.length + reviewMovements.length + unresolvedExternalAccounts.length}</span>
           </div>
           <div className="ml3-review-grid">
             <section className="ml3-subpanel ml3-subpanel--review">
-              <h3>حسابات غير واضحة</h3>
-              {balancesByKind.review.length === 0 ? <p className="ml3-empty">لا توجد حسابات معلقة الآن.</p> : null}
+              <h3>حسابات</h3>
+              {balancesByKind.review.length === 0 ? <p className="ml3-empty">لا شيء</p> : null}
               {balancesByKind.review.map((bucket) => (
                 <ReviewAccountCard
                   key={bucket.account.id}
@@ -1333,15 +1368,15 @@ export default function MohammadLedgerApp() {
               ))}
             </section>
             <section className="ml3-subpanel ml3-subpanel--external">
-              <h3>أسماء جديدة</h3>
-              {unresolvedExternalAccounts.length === 0 ? <p className="ml3-empty">لا توجد أسماء خارج الملخص الآن.</p> : null}
+              <h3>أسماء</h3>
+              {unresolvedExternalAccounts.length === 0 ? <p className="ml3-empty">لا شيء</p> : null}
               {unresolvedExternalAccounts.map((account) => (
                 <ExternalAccountCard key={account.id} account={account} onCreate={addExternalAccount} />
               ))}
             </section>
             <section className="ml3-subpanel ml3-subpanel--movement">
-              <h3>حركات ناقصة</h3>
-              {reviewMovements.length === 0 ? <p className="ml3-empty">لا توجد حركات ناقصة الآن.</p> : null}
+              <h3>حركات</h3>
+              {reviewMovements.length === 0 ? <p className="ml3-empty">لا شيء</p> : null}
               {reviewMovements.map((movement) => (
                 <ReviewMovementCard
                   key={movement.id}
@@ -1363,12 +1398,11 @@ export default function MohammadLedgerApp() {
           <div className="ml3-panel-head">
             <div>
               <h2>السجل</h2>
-              <p>كل حركة محفوظة هنا.</p>
             </div>
             <span>{postedUserMovements.length}</span>
           </div>
           <div className="ml3-history-list">
-            {postedUserMovements.length === 0 ? <p className="ml3-empty">لا توجد حركات جديدة بعد.</p> : null}
+            {postedUserMovements.length === 0 ? <p className="ml3-empty">لا شيء</p> : null}
             {postedUserMovements.map((movement) => (
               <article className={`ml3-history-row ml3-history-row--${movementTone(movement.type)}`} key={movement.id}>
                 <div>
@@ -1707,7 +1741,7 @@ export default function MohammadLedgerApp() {
                     onChange={(value) => updateMovementDraft('destinationAccountId', value)}
                   />
                 </div>
-                <button type="button" className="ml3-step-next" disabled={!movementDraft.destinationAccountId || movementDraft.sourceAccountId === movementDraft.destinationAccountId} onClick={advanceMovementStep}>
+                <button type="button" className="ml3-step-next" disabled={!movementDraft.destinationAccountId || sameLogicalAccount(draftSourceAccount, draftDestinationAccount)} onClick={advanceMovementStep}>
                   التالي
                 </button>
               </section>

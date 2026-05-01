@@ -102,6 +102,26 @@ describe('mohammad ledger core', () => {
     expect(movement.validation.errors.some((error) => error.message.includes('الملخص'))).toBe(true)
   })
 
+  it('rejects transfers between the same owner and same account detail', () => {
+    const accounts = [
+      createAccount({ id: 'saeed-cash-a', ownerName: 'سعيد', subAccountName: 'كاش', type: ACCOUNT_TYPES.PERSON, valueKind: 'receivable' }),
+      createAccount({ id: 'saeed-cash-b', ownerName: 'سعيد', subAccountName: 'كاش', type: ACCOUNT_TYPES.PERSON, valueKind: 'receivable' }),
+    ]
+    const movement = postMovement(
+      {
+        type: MOVEMENT_TYPES.TRANSFER,
+        amount: 100,
+        currency: CURRENCIES.DINAR,
+        sourceAccountId: 'saeed-cash-a',
+        destinationAccountId: 'saeed-cash-b',
+      },
+      accounts,
+    )
+
+    expect(movement.status).toBe(MOVEMENT_STATUSES.NEEDS_REVIEW)
+    expect(movement.validation.errors.some((error) => error.message.includes('نفس الاسم'))).toBe(true)
+  })
+
   it('supports voiding a posted movement without deleting it', () => {
     const openings = createOpeningMovements(mohammadAccountCatalog)
     const movement = postMovement(

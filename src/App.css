@@ -6019,6 +6019,15 @@ tbody tr:hover {
   color: var(--ml3-step-ink, #25352d);
 }
 
+.ml3-picked-account--person { background: #fffaf0 !important; border-color: #efd89e !important; }
+.ml3-picked-account--person-bank { background: #eef7ff !important; border-color: #b7d8ef !important; }
+.ml3-picked-account--person-usd { background: #f2f7ff !important; border-color: #bfd2f2 !important; }
+.ml3-picked-account--cash { background: #f0fbf3 !important; border-color: #b9e6c9 !important; }
+.ml3-picked-account--bank { background: #eef7ff !important; border-color: #b7d8ef !important; }
+.ml3-picked-account--asset { background: #f7f1ff !important; border-color: #d5c5f2 !important; }
+.ml3-picked-account--expense,
+.ml3-picked-account--review { background: #fff0ec !important; border-color: #efb8ae !important; }
+
 .ml3-picked-account span,
 .ml3-search-box span {
   font-size: 0.68rem;
@@ -6038,6 +6047,17 @@ tbody tr:hover {
   display: flex;
   gap: 5px;
   flex-wrap: nowrap;
+  align-items: center;
+}
+
+.ml3-picked-actions b {
+  border-radius: 999px;
+  padding: 5px 8px;
+  background: rgba(255, 255, 255, 0.76);
+  color: #25352d;
+  font-size: 0.68rem;
+  font-weight: 950;
+  white-space: nowrap;
 }
 
 .ml3-picked-actions button {
@@ -6114,6 +6134,41 @@ tbody tr:hover {
   cursor: pointer;
 }
 
+.ml3-picker-results button.ml3-picker-option--person {
+  background: #fffaf0;
+  border-color: #efd89e;
+}
+
+.ml3-picker-results button.ml3-picker-option--person-bank {
+  background: #eef7ff;
+  border-color: #b7d8ef;
+}
+
+.ml3-picker-results button.ml3-picker-option--person-usd {
+  background: #f2f7ff;
+  border-color: #bfd2f2;
+}
+
+.ml3-picker-results button.ml3-picker-option--cash {
+  background: #f0fbf3;
+  border-color: #b9e6c9;
+}
+
+.ml3-picker-results button.ml3-picker-option--bank {
+  background: #eef7ff;
+  border-color: #b7d8ef;
+}
+
+.ml3-picker-results button.ml3-picker-option--asset {
+  background: #f7f1ff;
+  border-color: #d5c5f2;
+}
+
+.ml3-picker-results button.ml3-picker-option--expense {
+  background: #fff0ec;
+  border-color: #efb8ae;
+}
+
 .ml3-picker-results button.is-selected {
   border-color: color-mix(in srgb, var(--ml3-step-tone, #19a364) 58%, #ffffff);
   background: color-mix(in srgb, var(--ml3-step-tone, #19a364) 12%, #ffffff);
@@ -6158,6 +6213,8 @@ tbody tr:hover {
 }
 
 .ml3-picker-dot--person { background: #c88600; }
+.ml3-picker-dot--person-bank { background: #116fab; }
+.ml3-picker-dot--person-usd { background: #4169b1; }
 .ml3-picker-dot--cash { background: #0d8a54; }
 .ml3-picker-dot--bank { background: #116fab; }
 .ml3-picker-dot--expense { background: #b8322b; }
@@ -6278,13 +6335,13 @@ tbody tr:hover {
 }
 
 .ml3-preview {
-  border-radius: 12px;
-  padding: 5px;
+  border-radius: 14px;
+  padding: 8px;
   display: grid;
-  gap: 3px;
-  font-size: 0.74rem;
-  max-height: 116px;
-  overflow: auto;
+  gap: 6px;
+  font-size: 0.8rem;
+  max-height: none;
+  overflow: visible;
 }
 
 .ml3-preview.is-ok { background: #ecf6ee; }
@@ -6301,11 +6358,13 @@ tbody tr:hover {
 
 .ml3-effect {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) repeat(3, minmax(58px, auto));
-  gap: 4px;
+  grid-template-columns: minmax(0, 1.2fr) repeat(3, minmax(64px, auto));
+  gap: 6px;
   align-items: center;
-  padding-top: 5px;
-  border-top: 1px solid rgba(37, 53, 45, 0.12);
+  padding: 7px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(37, 53, 45, 0.1);
   animation: ml3-rise 0.26s ease both;
 }
 
@@ -6621,6 +6680,33 @@ tbody tr:hover {
   min-width: 0;
 }
 
+.ml3-account-sections {
+  display: grid;
+  gap: 7px;
+}
+
+.ml3-account-sections .ml3-list-block {
+  border-radius: 10px;
+  padding: 6px;
+  background: #f7faf6;
+  border: 1px solid #e1e9df;
+}
+
+.ml3-account-sections .ml3-panel-head {
+  margin-bottom: 5px;
+  padding: 6px 7px;
+}
+
+.ml3-account-sections .ml3-panel-head h2 {
+  font-size: 0.82rem;
+}
+
+.ml3-account-sections .ml3-panel-head span {
+  padding: 2px 7px;
+  min-height: 20px;
+  font-size: 0.68rem;
+}
+
 .ml3-account-switcher {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -6668,6 +6754,7 @@ tbody tr:hover {
 .ml3-account-switcher--money::before { background: #0d8a54 !important; }
 .ml3-account-switcher--assets::before { background: #7052bd !important; }
 .ml3-account-switcher--expenses::before { background: #b8322b !important; }
+.ml3-account-switcher--review::before { background: #d33b32 !important; }
 
 .ml3-account-switcher button:hover,
 .ml3-home-focus button:hover,
@@ -6685,6 +6772,7 @@ tbody tr:hover {
 .ml3-account-switcher--money.is-active { background: #0d7047; }
 .ml3-account-switcher--assets.is-active { background: #5d43a0; }
 .ml3-account-switcher--expenses.is-active { background: #8a332b; }
+.ml3-account-switcher--review.is-active { background: #9f2f28; }
 
 .ml3-account-switcher strong,
 .ml3-account-switcher span {
@@ -6836,6 +6924,18 @@ tbody tr:hover {
   --ml3-row-tone: #c88600;
   background: #fffaf0;
   border-color: #efd89e;
+}
+
+.ml3-account-row--person-bank {
+  --ml3-row-tone: #116fab;
+  background: #eef7ff;
+  border-color: #b7d8ef;
+}
+
+.ml3-account-row--person-usd {
+  --ml3-row-tone: #4169b1;
+  background: #f2f7ff;
+  border-color: #bfd2f2;
 }
 
 .ml3-account-row--cash {
@@ -7669,11 +7769,13 @@ tbody tr:hover {
   }
 
   .ml3-picked-actions {
+    display: grid;
+    grid-template-columns: auto 1fr 1fr;
     justify-content: stretch;
   }
 
   .ml3-picked-actions button {
-    flex: 1;
+    min-width: 0;
   }
 
   .ml3-picker-results {
@@ -7686,7 +7788,7 @@ tbody tr:hover {
   }
 
   .ml3-preview {
-    max-height: 88px;
+    max-height: none;
   }
 
   .ml3-today-panel {
