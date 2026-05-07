@@ -217,6 +217,14 @@ function normalizeStoredAccounts(accounts = []) {
   })
 }
 
+function sameRecordVersions(left = [], right = []) {
+  if (left.length !== right.length) return false
+  const version = (item) => item.updatedAt || item.reviewedAt || item.disabledAt || item.mergedIntoAccountId || item.createdAt || item.voidedAt || item.status || ''
+  const leftKeys = left.map((item) => `${item.id}:${version(item)}`).sort()
+  const rightKeys = right.map((item) => `${item.id}:${version(item)}`).sort()
+  return leftKeys.every((key, index) => key === rightKeys[index])
+}
+
 function loadInitialLedgerState() {
   const fallback = {
     accounts: normalizeStoredAccounts(mohammadAccountCatalog),
@@ -1075,8 +1083,9 @@ export default function MohammadLedgerApp() {
   const [isHydrated, setIsHydrated] = useState(false)
   const [storageMode, setStorageMode] = useState(getMohammadPersistenceMode)
   const [saveStatus, setSaveStatus] = useState('loading')
-  const [syncProblem, setSyncProblem] = useState(false)
+  const [, setSyncProblem] = useState(false)
   const [pendingUndo, setPendingUndo] = useState(null)
+  const [activeReviewKey, setActiveReviewKey] = useState('')
 
   useEffect(() => {
     if (typeof document === 'undefined') return undefined
@@ -1127,6 +1136,34 @@ export default function MohammadLedgerApp() {
           account.status !== ACCOUNT_STATUSES.INACTIVE,
       ),
   )
+  const reviewItems = useMemo(() => {
+    const accountItems = (balancesByKind.review || []).map((bucket) => ({
+      key: `account:${bucket.account.id}`,
+      type: 'account',
+      label: bucket.account.ownerName,
+      detail: bucket.account.subAccountName,
+      tone: 'danger',
+      bucket,
+    }))
+    const externalItems = unresolvedExternalAccounts.map((account) => ({
+      key: `external:${account.id}`,
+      type: 'external',
+      label: account.ownerName,
+      detail: account.subAccountName,
+      tone: 'info',
+      account,
+    }))
+    const movementItems = reviewMovements.map((movement) => ({
+      key: `movement:${movement.id}`,
+      type: 'movement',
+      label: movementLabels[movement.type] || 'حركة',
+      detail: movement.amount ? money(movement.amount, movement.currency) : 'بلا مبلغ',
+      tone: 'warning',
+      movement,
+    }))
+    return [...accountItems, ...movementItems, ...externalItems]
+  }, [balancesByKind.review, reviewMovements, unresolvedExternalAccounts])
+  const activeReviewItem = reviewItems.find((item) => item.key === activeReviewKey) || reviewItems[0] || null
   const postedUserMovements = movements.filter((movement) => !movement.id?.startsWith('opening-')).slice().reverse()
   const todayMovements = postedUserMovements.filter((movement) => isToday(movement.createdAt || movement.updatedAt))
   const totals = useMemo(() => {
@@ -1195,14 +1232,21 @@ export default function MohammadLedgerApp() {
   useEffect(() => {
     if (!isHydrated) return undefined
     let cancelled = false
-    setSaveStatus(syncProblem ? 'local-only' : 'saving')
+    setSaveStatus('saving')
 
     saveMohammadPersistedState({ accounts, movements })
       .then((result) => {
         if (cancelled) return
         setStorageMode(result.mode)
-        if (result.supabaseOk) setSyncProblem(false)
-        setSaveStatus(result.supabaseOk ? 'saved' : (syncProblem ? 'local-only' : 'local'))
+        const hasSyncProblem = result.mode === 'supabase' && !result.supabaseOk
+        setSyncProblem(hasSyncProblem)
+        setSaveStatus(result.supabaseOk ? 'saved' : (result.mode === 'supabase' ? 'local-only' : 'local'))
+        if (result.state) {
+          const mergedAccounts = normalizeStoredAccounts(result.state.accounts)
+          const mergedMovements = result.state.movements || []
+          if (!sameRecordVersions(accounts, mergedAccounts)) setAccounts(mergedAccounts)
+          if (!sameRecordVersions(movements, mergedMovements)) setMovements(mergedMovements)
+        }
       })
       .catch((err) => {
         if (cancelled) return
@@ -1214,7 +1258,7 @@ export default function MohammadLedgerApp() {
     return () => {
       cancelled = true
     }
-  }, [accounts, movements, isHydrated, syncProblem])
+  }, [accounts, movements, isHydrated])
 
   useEffect(() => {
     if (!pendingUndo) return undefined
@@ -1230,6 +1274,17 @@ export default function MohammadLedgerApp() {
       document.body.style.overflow = previousOverflow
     }
   }, [selectedAccountId])
+
+  useEffect(() => {
+    if (activeSection !== 'review') return
+    if (!reviewItems.length) {
+      setActiveReviewKey('')
+      return
+    }
+    if (!reviewItems.some((item) => item.key === activeReviewKey)) {
+      setActiveReviewKey(reviewItems[0].key)
+    }
+  }, [activeSection, activeReviewKey, reviewItems])
 
   function updateMovementDraft(field, value) {
     setMovementDraft((current) => ({ ...current, [field]: value }))
@@ -1283,17 +1338,21 @@ export default function MohammadLedgerApp() {
       account.valueKind !== VALUE_KINDS.ASSET &&
       account.status === ACCOUNT_STATUSES.ACTIVE
     const moneyOrPerson = activeAccounts.filter(isPostingAccount)
-    const accountsWithUsd = moneyOrPerson.filter((account) => Math.abs(balanceByAccountId.get(account.id)?.usd || 0) > 0.000001)
+    const usdReadyAccounts = moneyOrPerson.filter((account) => {
+      const hasUsdBalance = Math.abs(balanceByAccountId.get(account.id)?.usd || 0) > 0.000001
+      const text = `${account.ownerName || ''} ${account.subAccountName || ''} ${account.legacyName || ''}`.toLowerCase()
+      return hasUsdBalance || /دولار|usd|\$/.test(text)
+    })
     const sourceAccount = accountById.get(movementDraft.sourceAccountId)
     const destinationAccount = accountById.get(movementDraft.destinationAccountId)
     const removeLogicalDuplicate = (list, compareAccount) =>
       compareAccount ? list.filter((account) => !sameLogicalAccount(account, compareAccount)) : list
 
     if (movementDraft.type === MOVEMENT_TYPES.USD_SALE && role === 'source') {
-      return accountsWithUsd.length ? accountsWithUsd : moneyOrPerson
+      return usdReadyAccounts.length ? usdReadyAccounts : moneyOrPerson
     }
     if (movementDraft.type === MOVEMENT_TYPES.USD_PURCHASE && role === 'destination') {
-      return removeLogicalDuplicate(accountsWithUsd.length ? accountsWithUsd : moneyOrPerson, sourceAccount)
+      return removeLogicalDuplicate(usdReadyAccounts.length ? usdReadyAccounts : moneyOrPerson, sourceAccount)
     }
     if (role === 'destination') {
       return removeLogicalDuplicate(moneyOrPerson, sourceAccount)
@@ -1377,7 +1436,7 @@ export default function MohammadLedgerApp() {
     setAccounts((current) =>
       current.map((account) =>
         account.id === accountId
-          ? { ...account, status: ACCOUNT_STATUSES.ACTIVE, type: account.type === ACCOUNT_TYPES.REVIEW ? ACCOUNT_TYPES.PERSON : account.type, valueKind: account.valueKind === VALUE_KINDS.REVIEW ? VALUE_KINDS.RECEIVABLE : account.valueKind }
+          ? { ...account, status: ACCOUNT_STATUSES.ACTIVE, type: account.type === ACCOUNT_TYPES.REVIEW ? ACCOUNT_TYPES.PERSON : account.type, valueKind: account.valueKind === VALUE_KINDS.REVIEW ? VALUE_KINDS.RECEIVABLE : account.valueKind, updatedAt: new Date().toISOString() }
           : account,
       ),
     )
@@ -1478,7 +1537,7 @@ export default function MohammadLedgerApp() {
     setAccounts((current) =>
       current.map((account) =>
         account.id === sourceAccountId
-          ? { ...account, status: ACCOUNT_STATUSES.INACTIVE, mergedIntoAccountId: targetAccountId }
+          ? { ...account, status: ACCOUNT_STATUSES.INACTIVE, mergedIntoAccountId: targetAccountId, updatedAt: new Date().toISOString() }
           : account,
       ),
     )
@@ -1606,45 +1665,50 @@ export default function MohammadLedgerApp() {
             <div>
               <h2>مراجعة</h2>
             </div>
-            <span>{balancesByKind.review.length + reviewMovements.length + unresolvedExternalAccounts.length}</span>
+            <span>{reviewItems.length}</span>
           </div>
-          <div className="ml3-review-grid">
-            <section className="ml3-subpanel ml3-subpanel--review">
-              <h3>حسابات</h3>
-              {balancesByKind.review.length === 0 ? <p className="ml3-empty">لا شيء</p> : null}
-              {balancesByKind.review.map((bucket) => (
+          <div className="ml3-review-workspace">
+            <div className="ml3-review-queue" aria-label="قائمة المراجعة">
+              {reviewItems.length === 0 ? <p className="ml3-empty">لا شيء</p> : null}
+              {reviewItems.map((item, index) => (
+                <button
+                  type="button"
+                  key={item.key}
+                  className={`ml3-review-ticket ml3-review-ticket--${item.tone} ${activeReviewItem?.key === item.key ? 'is-active' : ''}`}
+                  onClick={() => setActiveReviewKey(item.key)}
+                >
+                  <span>{index + 1}</span>
+                  <strong>{item.label}</strong>
+                  <b>{item.detail}</b>
+                </button>
+              ))}
+            </div>
+            <div className="ml3-review-active">
+              {activeReviewItem?.type === 'account' ? (
                 <ReviewAccountCard
-                  key={bucket.account.id}
-                  bucket={bucket}
+                  key={activeReviewItem.bucket.account.id}
+                  bucket={activeReviewItem.bucket}
                   activeAccounts={activeAccounts}
                   onResolve={resolveReviewAccount}
                   onMerge={mergeReviewAccount}
                   onDisable={disableAccount}
                 />
-              ))}
-            </section>
-            <section className="ml3-subpanel ml3-subpanel--external">
-              <h3>أسماء</h3>
-              {unresolvedExternalAccounts.length === 0 ? <p className="ml3-empty">لا شيء</p> : null}
-              {unresolvedExternalAccounts.map((account) => (
-                <ExternalAccountCard key={account.id} account={account} onCreate={addExternalAccount} />
-              ))}
-            </section>
-            <section className="ml3-subpanel ml3-subpanel--movement">
-              <h3>حركات</h3>
-              {reviewMovements.length === 0 ? <p className="ml3-empty">لا شيء</p> : null}
-              {reviewMovements.map((movement) => (
+              ) : null}
+              {activeReviewItem?.type === 'external' ? (
+                <ExternalAccountCard key={activeReviewItem.account.id} account={activeReviewItem.account} onCreate={addExternalAccount} />
+              ) : null}
+              {activeReviewItem?.type === 'movement' ? (
                 <ReviewMovementCard
-                  key={movement.id}
-                  movement={movement}
+                  key={activeReviewItem.movement.id}
+                  movement={activeReviewItem.movement}
                   activeAccounts={activeAccounts}
                   balanceByAccountId={balanceByAccountId}
                   onResolve={resolveReviewMovement}
                   onEdit={editReviewMovement}
                   onCancel={cancelMovement}
                 />
-              ))}
-            </section>
+              ) : null}
+            </div>
           </div>
         </section>
       )

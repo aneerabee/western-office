@@ -109,8 +109,17 @@ export function validateMovement(movement, accounts = []) {
   if (typeof amount !== 'number' || !Number.isFinite(amount) || amount === 0) {
     errors.push({ field: 'amount', message: 'القيمة يجب أن تكون رقمًا غير صفري.' })
   }
+  if (type !== MOVEMENT_TYPES.CORRECTION && typeof amount === 'number' && Number.isFinite(amount) && amount <= 0) {
+    errors.push({ field: 'amount', message: 'القيمة يجب أن تكون أكبر من صفر.' })
+  }
   if (!currency || !Object.values(CURRENCIES).includes(currency)) {
     errors.push({ field: 'currency', message: 'العملة مطلوبة.' })
+  }
+  if (type === MOVEMENT_TYPES.USD_SALE && currency && currency !== CURRENCIES.USD) {
+    errors.push({ field: 'currency', message: 'بيع الدولار يبدأ بمبلغ دولار.' })
+  }
+  if (type === MOVEMENT_TYPES.USD_PURCHASE && currency && currency !== CURRENCIES.DINAR) {
+    errors.push({ field: 'currency', message: 'شراء الدولار يبدأ بمبلغ دينار.' })
   }
   if (SOURCE_REQUIRED_TYPES.has(type) && !sourceId) {
     errors.push({ field: 'sourceAccountId', message: 'حساب المصدر مطلوب لهذه الحركة.' })
@@ -314,6 +323,7 @@ export function createAccount({
     status,
     notes,
     createdFrom: 'manual',
+    createdAt: isoNow(),
   }
 }
 

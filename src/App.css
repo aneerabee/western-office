@@ -5529,7 +5529,7 @@ tbody tr:hover {
   border: 0;
   background: transparent;
   cursor: pointer;
-  min-height: 32px;
+  min-height: 44px;
   min-width: 0;
   white-space: nowrap;
   overflow: hidden;
@@ -5562,7 +5562,7 @@ tbody tr:hover {
 }
 
 .ml3-layout.is-entry {
-  grid-template-columns: minmax(0, 980px);
+  grid-template-columns: minmax(0, 1080px);
   justify-content: center;
 }
 
@@ -5578,7 +5578,7 @@ tbody tr:hover {
 
 .ml3-entry {
   display: grid;
-  grid-template-columns: minmax(0, 560px) minmax(280px, 400px);
+  grid-template-columns: minmax(0, 640px) minmax(280px, 420px);
   gap: 6px;
   position: sticky;
   top: 8px;
@@ -5637,7 +5637,7 @@ tbody tr:hover {
 .ml3-entry-mode button {
   border: 0;
   border-radius: 8px;
-  min-height: 30px;
+  min-height: 44px;
   background: transparent;
   color: #39473f;
   font: inherit;
@@ -5893,7 +5893,7 @@ tbody tr:hover {
 .ml3-mini-action {
   border: 0;
   border-radius: 10px;
-  min-height: 30px;
+  min-height: 44px;
   padding: 5px 6px;
   font: inherit;
   font-weight: 950;
@@ -5924,7 +5924,7 @@ tbody tr:hover {
   gap: 2px;
   text-align: inherit;
   align-content: center;
-  min-height: 38px;
+  min-height: 44px;
 }
 
 .ml3-action-choice strong,
@@ -6161,7 +6161,7 @@ tbody tr:hover {
 .ml3-picked-actions button {
   border: 0;
   border-radius: 999px;
-  min-height: 30px;
+  min-height: 40px;
   padding: 5px 9px;
   background: var(--ml3-picked-tone, var(--ml3-step-tone, #0f7b62));
   color: #ffffff;
@@ -6259,7 +6259,7 @@ tbody tr:hover {
   border: 0;
   border-radius: 10px;
   min-width: 0;
-  min-height: 30px;
+  min-height: 40px;
   padding: 5px 6px;
   background: #eef2ed;
   color: #39473f;
@@ -6461,7 +6461,7 @@ tbody tr:hover {
 .ml3-step-next {
   border: 0;
   border-radius: 10px;
-  min-height: 30px;
+  min-height: 44px;
   background: var(--ml3-step-tone);
   color: #ffffff;
   font: inherit;
@@ -6509,7 +6509,7 @@ tbody tr:hover {
 .ml3-number-pad button {
   border: 0;
   border-radius: 11px;
-  min-height: 40px;
+  min-height: 44px;
   background: color-mix(in srgb, var(--ml3-step-tone, #1768ac) 10%, #ffffff);
   color: var(--ml3-step-ink, #25352d);
   font: inherit;
@@ -6535,7 +6535,7 @@ tbody tr:hover {
 .ml3-add-account input,
 .ml3-add-account select {
   width: 100%;
-  min-height: 30px;
+  min-height: 40px;
   border: 1px solid #d9e1d7;
   border-radius: 10px;
   background: #fbfdf9;
@@ -6787,7 +6787,7 @@ tbody tr:hover {
 .ml3-account-presets button {
   border: 1px solid #d9e1d7;
   border-radius: 10px;
-  min-height: 38px;
+  min-height: 44px;
   padding: 7px 8px;
   background: #fbfdf9;
   color: #17211c;
@@ -6860,7 +6860,7 @@ tbody tr:hover {
 .ml3-account-detail-choice button {
   border: 1px solid #d9e1d7;
   border-radius: 10px;
-  min-height: 32px;
+  min-height: 40px;
   background: #fbfdf9;
   color: #39473f;
   font: inherit;
@@ -7033,8 +7033,116 @@ tbody tr:hover {
   font-weight: 950;
 }
 
-.ml3-review-grid {
-  grid-template-columns: minmax(0, 1fr);
+.ml3-review-grid,
+.ml3-review-workspace {
+  grid-template-columns: minmax(230px, 0.42fr) minmax(0, 1fr);
+  align-items: start;
+}
+
+.ml3-review-workspace {
+  display: grid;
+  gap: 8px;
+}
+
+.ml3-review-queue {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  position: sticky;
+  top: 58px;
+}
+
+.ml3-review-ticket {
+  min-width: 0;
+  min-height: 48px;
+  border: 1px solid #e1e9df;
+  border-radius: 10px;
+  background: #f8faf7;
+  color: #17211c;
+  padding: 7px 8px;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 2px 7px;
+  text-align: inherit;
+  font: inherit;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  transition:
+    transform 0.16s ease,
+    box-shadow 0.16s ease,
+    border-color 0.16s ease,
+    background 0.16s ease;
+}
+
+.ml3-review-ticket::before {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  width: 5px;
+  background: #8ba09a;
+}
+
+.ml3-review-ticket--danger::before { background: #b8322b; }
+.ml3-review-ticket--warning::before { background: #a86425; }
+.ml3-review-ticket--info::before { background: #1768ac; }
+
+.ml3-review-ticket:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 22px rgba(37, 53, 45, 0.1);
+}
+
+.ml3-review-ticket.is-active {
+  background: #25352d;
+  border-color: #25352d;
+  color: #ffffff;
+  box-shadow: 0 12px 26px rgba(37, 53, 45, 0.18);
+}
+
+.ml3-review-ticket span {
+  grid-row: 1 / span 2;
+  width: 26px;
+  height: 26px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  background: rgba(37, 53, 45, 0.1);
+  font-size: 0.75rem;
+  font-weight: 950;
+}
+
+.ml3-review-ticket.is-active span {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.ml3-review-ticket strong,
+.ml3-review-ticket b {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ml3-review-ticket strong {
+  font-size: 0.86rem;
+  line-height: 1.1;
+}
+
+.ml3-review-ticket b {
+  color: #68756f;
+  font-size: 0.7rem;
+  font-weight: 900;
+}
+
+.ml3-review-ticket.is-active b {
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.ml3-review-active {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
 }
 
 .ml3-overview-grid {
@@ -7974,7 +8082,8 @@ tbody tr:hover {
   .ml3-tabs button {
     width: auto;
     min-width: 0 !important;
-    padding: 4px 6px;
+    min-height: 44px;
+    padding: 6px;
     font-size: 0.76rem;
   }
 
@@ -7988,7 +8097,7 @@ tbody tr:hover {
   }
 
   .ml3-entry-mode button {
-    min-height: 26px;
+    min-height: 44px;
   }
 
   .ml3-entry-card,
@@ -8047,14 +8156,14 @@ tbody tr:hover {
   .ml3-entry-card textarea,
   .ml3-add-account input,
   .ml3-add-account select {
-    min-height: 27px;
-    padding: 4px 7px;
+    min-height: 40px;
+    padding: 6px 8px;
     border-radius: 9px;
     font-size: 16px;
   }
 
   .ml3-entry-card textarea {
-    min-height: 27px;
+    min-height: 40px;
   }
 
   .ml3-account-picker {
@@ -8165,8 +8274,22 @@ tbody tr:hover {
 
   .ml3-account-switcher,
   .ml3-home-grid,
-  .ml3-entry-guide-grid {
+  .ml3-entry-guide-grid,
+  .ml3-review-workspace {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ml3-review-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .ml3-review-queue {
+    position: static;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ml3-review-ticket {
+    min-height: 52px;
   }
 
   .ml3-picker-results,

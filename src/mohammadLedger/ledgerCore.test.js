@@ -238,6 +238,52 @@ describe('mohammad ledger core', () => {
     expect(preview.validation.errors.some((error) => error.field === 'rate')).toBe(true)
   })
 
+  it('rejects negative amounts for normal posted movements', () => {
+    const movement = postMovement(
+      {
+        type: MOVEMENT_TYPES.TRANSFER,
+        amount: -100,
+        currency: CURRENCIES.DINAR,
+        sourceAccountId: 'me-cash',
+        destinationAccountId: 'saeed-cash',
+      },
+      mohammadAccountCatalog,
+    )
+
+    expect(movement.status).toBe(MOVEMENT_STATUSES.NEEDS_REVIEW)
+    expect(movement.validation.errors.some((error) => error.field === 'amount')).toBe(true)
+  })
+
+  it('enforces the starting currency for usd sale and purchase', () => {
+    const sale = postMovement(
+      {
+        type: MOVEMENT_TYPES.USD_SALE,
+        amount: 100,
+        currency: CURRENCIES.DINAR,
+        rate: 7.5,
+        sourceAccountId: 'me-cash',
+        destinationAccountId: 'me-jumhouria',
+      },
+      mohammadAccountCatalog,
+    )
+    const purchase = postMovement(
+      {
+        type: MOVEMENT_TYPES.USD_PURCHASE,
+        amount: 750,
+        currency: CURRENCIES.USD,
+        rate: 7.5,
+        sourceAccountId: 'me-jumhouria',
+        destinationAccountId: 'me-cash',
+      },
+      mohammadAccountCatalog,
+    )
+
+    expect(sale.status).toBe(MOVEMENT_STATUSES.NEEDS_REVIEW)
+    expect(purchase.status).toBe(MOVEMENT_STATUSES.NEEDS_REVIEW)
+    expect(sale.validation.errors.some((error) => error.field === 'currency')).toBe(true)
+    expect(purchase.validation.errors.some((error) => error.field === 'currency')).toBe(true)
+  })
+
   it('labels balance direction based on account kind', () => {
     const person = mohammadAccountCatalog.find((account) => account.id === 'rabee-cash')
     const bank = mohammadAccountCatalog.find((account) => account.id === 'me-jumhouria')

@@ -10,14 +10,13 @@ const STATE_ROW_ID = 'default'
 const BACKUP_LIMIT = 12
 
 let cachedClient = null
-let remoteDisabledForSession = false
 
 function hasBrowserStorage() {
   return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'
 }
 
 function getSupabaseClient() {
-  if (remoteDisabledForSession || !SUPABASE_URL || !SUPABASE_ANON_KEY) return null
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return null
   if (!cachedClient) {
     cachedClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       auth: { persistSession: false, autoRefreshToken: false },
@@ -47,11 +46,41 @@ function stateTimestamp(state) {
   return Number.isFinite(time) ? time : 0
 }
 
+function recordTimestamp(record) {
+  const time = new Date(record?.updatedAt || record?.reviewedAt || record?.disabledAt || record?.voidedAt || record?.createdAt || 0).getTime()
+  return Number.isFinite(time) ? time : 0
+}
+
+function mergeRecordsById(left = [], right = []) {
+  const byId = new Map()
+  for (const record of [...left, ...right]) {
+    if (!record?.id) continue
+    const existing = byId.get(record.id)
+    if (!existing || recordTimestamp(record) >= recordTimestamp(existing)) {
+      byId.set(record.id, record)
+    }
+  }
+  return Array.from(byId.values())
+}
+
+function mergeLedgerStates(localState, remoteState, fallbackState) {
+  const local = normalizeLedgerState(localState, fallbackState)
+  const remote = normalizeLedgerState(remoteState, fallbackState)
+  const savedAt = stateTimestamp(remote) >= stateTimestamp(local) ? remote.savedAt : local.savedAt
+  return {
+    version: 1,
+    savedAt,
+    accounts: mergeRecordsById(local.accounts, remote.accounts),
+    movements: mergeRecordsById(local.movements, remote.movements),
+  }
+}
+
 function chooseFreshestState(localState, remoteState, fallbackState) {
   if (localState && remoteState) {
-    return stateTimestamp(remoteState) >= stateTimestamp(localState)
-      ? { state: remoteState, source: 'supabase' }
-      : { state: localState, source: 'local-newer' }
+    return {
+      state: mergeLedgerStates(localState, remoteState, fallbackState),
+      source: stateTimestamp(remoteState) >= stateTimestamp(localState) ? 'merged-supabase' : 'merged-local',
+    }
   }
   if (remoteState) return { state: remoteState, source: 'supabase' }
   if (localState) return { state: localState, source: 'local' }
@@ -135,13 +164,12 @@ export async function loadMohammadPersistedState(fallbackState) {
     return { mode, ...selected }
   } catch (err) {
     console.warn('[mohammad-persistence] remote load failed:', err?.message || err)
-    remoteDisabledForSession = true
-    return { mode, state: localState, source: 'local-after-remote-error', loadError: true }
+    return { mode, state: localState, source: 'local-after-remote-error', loadError: true, error: err }
   }
 }
 
 export async function saveMohammadPersistedState(state) {
-  const normalizedState = normalizeLedgerState(
+  let normalizedState = normalizeLedgerState(
     { ...state, savedAt: new Date().toISOString(), version: 1 },
     state,
   )
@@ -154,14 +182,21 @@ export async function saveMohammadPersistedState(state) {
   }
 
   if (getMohammadPersistenceMode() !== 'supabase') {
-    return { mode: 'local', localOk: true, supabaseOk: false }
+    return { mode: 'local', localOk: true, supabaseOk: false, state: normalizedState }
   }
 
   try {
+    const remoteState = await loadRemoteMohammadState(normalizedState)
+    if (remoteState) {
+      normalizedState = {
+        ...mergeLedgerStates(normalizedState, remoteState, normalizedState),
+        savedAt: new Date().toISOString(),
+      }
+      writeLocalMohammadState(normalizedState)
+    }
     await saveRemoteMohammadState(normalizedState)
   } catch (err) {
-    remoteDisabledForSession = true
     throw err
   }
-  return { mode: 'supabase', localOk: true, supabaseOk: true }
+  return { mode: 'supabase', localOk: true, supabaseOk: true, state: normalizedState }
 }
