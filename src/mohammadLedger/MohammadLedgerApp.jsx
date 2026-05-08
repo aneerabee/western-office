@@ -22,7 +22,6 @@ import {
 } from './ledgerCore'
 import {
   getMohammadPersistenceMode,
-  listLocalMohammadBackups,
   loadLocalMohammadState,
   loadMohammadPersistedState,
   saveMohammadPersistedState,
@@ -1144,7 +1143,6 @@ export default function MohammadLedgerApp() {
   const [pendingUndo, setPendingUndo] = useState(null)
   const [activeReviewKey, setActiveReviewKey] = useState('')
   const [editingMovementId, setEditingMovementId] = useState('')
-  const [backupSnapshots, setBackupSnapshots] = useState(() => listLocalMohammadBackups())
 
   useEffect(() => {
     if (typeof document === 'undefined') return undefined
@@ -1225,16 +1223,6 @@ export default function MohammadLedgerApp() {
   const activeReviewItem = reviewItems.find((item) => item.key === activeReviewKey) || reviewItems[0] || null
   const postedUserMovements = movements.filter((movement) => !movement.id?.startsWith('opening-')).slice().reverse()
   const todayMovements = postedUserMovements.filter((movement) => isToday(movement.createdAt || movement.updatedAt))
-  const latestUserMovement = postedUserMovements[0] || null
-  const ledgerHealthItems = useMemo(() => {
-    const items = []
-    if (saveStatus === 'saved' && storageMode === 'supabase') items.push({ tone: 'ok', label: 'السحابة', value: 'جاهزة' })
-    else items.push({ tone: 'warn', label: 'السحابة', value: storageTextForStatus(saveStatus, storageMode) })
-    items.push({ tone: reviewItems.length ? 'warn' : 'ok', label: 'المراجعة', value: reviewItems.length ? formatCount(reviewItems.length) : 'صفر' })
-    items.push({ tone: backupSnapshots.length ? 'ok' : 'warn', label: 'نسخ محلية', value: formatCount(backupSnapshots.length) })
-    items.push({ tone: latestUserMovement ? 'ok' : 'warn', label: 'آخر حركة', value: latestUserMovement ? movementDateTime(latestUserMovement.createdAt || latestUserMovement.updatedAt) : 'لا يوجد' })
-    return items
-  }, [backupSnapshots.length, latestUserMovement, reviewItems.length, saveStatus, storageMode])
   const totals = useMemo(() => {
     return balances.reduce(
       (acc, bucket) => {
@@ -1316,7 +1304,6 @@ export default function MohammadLedgerApp() {
           if (!sameRecordVersions(accounts, mergedAccounts)) setAccounts(mergedAccounts)
           if (!sameRecordVersions(movements, mergedMovements)) setMovements(mergedMovements)
         }
-        setBackupSnapshots(listLocalMohammadBackups())
       })
       .catch((err) => {
         if (cancelled) return
@@ -1694,52 +1681,6 @@ export default function MohammadLedgerApp() {
     )
     setMovements((current) => current.map((item) => (item.id === movement.id ? candidate : item)))
     setFeedback(candidate.status === MOVEMENT_STATUSES.POSTED ? 'تم إصلاح الحركة.' : 'ما زالت ناقصة.')
-  }
-
-  function restoreBackup(backup) {
-    if (!backup?.state) return
-    const ok = window.confirm('استرجاع هذه النسخة سيستبدل الحالة الحالية ثم يحفظها على السحابة. هل تريد المتابعة؟')
-    if (!ok) return
-    setAccounts(normalizeStoredAccounts(backup.state.accounts || []))
-    setMovements(Array.isArray(backup.state.movements) ? backup.state.movements : [])
-    setFeedback('تم استرجاع النسخة. يتم حفظها الآن.')
-    setBackupSnapshots(listLocalMohammadBackups())
-  }
-
-  function refreshBackups() {
-    setBackupSnapshots(listLocalMohammadBackups())
-    setFeedback('تم تحديث قائمة النسخ المحلية.')
-  }
-
-  function renderHealthPanel() {
-    const latestBackup = backupSnapshots[0] || null
-    return (
-      <section className="ml3-health-panel">
-        <div className="ml3-health-head">
-          <h2>صحة الدفتر</h2>
-          <span>{storageText}</span>
-        </div>
-        <div className="ml3-health-grid">
-          {ledgerHealthItems.map((item) => (
-            <article className={`ml3-health-item is-${item.tone}`} key={item.label}>
-              <span>{item.label}</span>
-              <strong>{item.value}</strong>
-            </article>
-          ))}
-        </div>
-        <div className="ml3-backup-actions">
-          <button type="button" onClick={refreshBackups}>تحديث النسخ</button>
-          <button type="button" disabled={!latestBackup} onClick={() => restoreBackup(latestBackup)}>
-            استرجاع آخر نسخة
-          </button>
-        </div>
-        {latestBackup ? (
-          <p>آخر نسخة: {movementDateTime(latestBackup.savedAt)} · {formatCount(latestBackup.movementCount)} حركة</p>
-        ) : (
-          <p>لا توجد نسخة محلية محفوظة بعد.</p>
-        )}
-      </section>
-    )
   }
 
   function renderAccountsSection() {
@@ -2301,8 +2242,6 @@ export default function MohammadLedgerApp() {
                 </div>
               </section>
             ) : null}
-            {renderHealthPanel()}
-
             {activeEntryMode === 'account' ? (
             <form className="ml3-add-account" onSubmit={addAccount}>
               <div className="ml3-entry-head">
