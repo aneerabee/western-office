@@ -96,4 +96,26 @@ describe('telegram account flow', () => {
       valueKind: VALUE_KINDS.BANK,
     })
   })
+
+  it('does not start a new account flow from an expired account button', async () => {
+    const ctx = createCtx()
+
+    await handleAccountCallback(ctx, 'acct:confirm')
+
+    expect(ctx.repository.state.accounts).toHaveLength(0)
+    expect(ctx.sessions.get(ctx.chatId, ctx.userId)).toBe(null)
+    expect(ctx.telegram.calls.at(-1).payload.text).toContain('عملية قديمة')
+  })
+
+  it('does not overwrite an active movement flow when an old account button is pressed', async () => {
+    const ctx = createCtx()
+    ctx.sessions.set(ctx.chatId, ctx.userId, { flow: 'movement', step: 'amount', draft: { amount: 0 } })
+
+    await handleAccountCallback(ctx, 'acct:type:person-cash')
+
+    const session = ctx.sessions.get(ctx.chatId, ctx.userId)
+    expect(session.flow).toBe('movement')
+    expect(session.step).toBe('amount')
+    expect(ctx.telegram.calls.at(-1).payload.text).toContain('عملية قديمة')
+  })
 })

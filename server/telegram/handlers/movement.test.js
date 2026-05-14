@@ -1,0 +1,72 @@
+import { describe, expect, it } from 'vitest'
+import { createMohammadFallbackState } from '../../../src/mohammadLedger/ledgerState.js'
+import { createSessionStore } from '../sessionStore.js'
+import { handleMovementCallback } from './movement.js'
+
+function memoryRepository(initialState = createMohammadFallbackState()) {
+  let state = initialState
+  return {
+    get state() {
+      return state
+    },
+    async load() {
+      return { state, updatedAt: null }
+    },
+    async update(updater) {
+      const result = await updater(state)
+      if (result?.state) state = result.state
+      return { ...result, state }
+    },
+  }
+}
+
+function createTelegramStub() {
+  const calls = []
+  return {
+    calls,
+    async sendMessage(payload) {
+      calls.push({ method: 'sendMessage', payload })
+      return { message_id: 101 }
+    },
+    async editMessageText(payload) {
+      calls.push({ method: 'editMessageText', payload })
+      return { message_id: payload.message_id }
+    },
+  }
+}
+
+function createCtx() {
+  return {
+    telegram: createTelegramStub(),
+    repository: memoryRepository(),
+    sessions: createSessionStore(),
+    chatId: 278516861,
+    userId: 278516861,
+    messageId: 55,
+    isCallback: true,
+  }
+}
+
+describe('telegram movement flow safety', () => {
+  it('does not start a new movement flow from an expired movement button', async () => {
+    const ctx = createCtx()
+
+    await handleMovementCallback(ctx, 'mv:confirm')
+
+    expect(ctx.repository.state.movements).toHaveLength(createMohammadFallbackState().movements.length)
+    expect(ctx.sessions.get(ctx.chatId, ctx.userId)).toBe(null)
+    expect(ctx.telegram.calls.at(-1).payload.text).toContain('عملية قديمة')
+  })
+
+  it('does not overwrite an active account flow when an old movement button is pressed', async () => {
+    const ctx = createCtx()
+    ctx.sessions.set(ctx.chatId, ctx.userId, { flow: 'account', step: 'owner', draft: { ownerName: '' } })
+
+    await handleMovementCallback(ctx, 'mv:type:transfer')
+
+    const session = ctx.sessions.get(ctx.chatId, ctx.userId)
+    expect(session.flow).toBe('account')
+    expect(session.step).toBe('owner')
+    expect(ctx.telegram.calls.at(-1).payload.text).toContain('عملية قديمة')
+  })
+})

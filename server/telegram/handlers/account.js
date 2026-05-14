@@ -102,7 +102,7 @@ export async function startAccount(ctx) {
 
 export async function handleAccountCallback(ctx, data) {
   const session = ctx.sessions.get(ctx.chatId, ctx.userId)
-  if (!session || session.flow !== 'account') return startAccount(ctx)
+  if (!session || session.flow !== 'account') return sendExpiredAccountMessage(ctx)
 
   if (data === 'acct:cancel') {
     ctx.sessions.clear(ctx.chatId, ctx.userId)
@@ -189,6 +189,24 @@ export async function handleAccountCallback(ctx, data) {
   }
 
   return sendStep(ctx, session)
+}
+
+async function sendExpiredAccountMessage(ctx) {
+  const text = '<b>هذه عملية قديمة.</b>\n<blockquote>افتح حسابًا جديدًا من القائمة إذا أردت البدء من جديد.</blockquote>'
+  if (ctx.isCallback && ctx.messageId) {
+    try {
+      return await ctx.telegram.editMessageText({
+        chat_id: ctx.chatId,
+        message_id: ctx.messageId,
+        text,
+        parse_mode: 'HTML',
+        reply_markup: mainMenuKeyboard(),
+      })
+    } catch {
+      // Fall back to a fresh message if Telegram cannot edit the old card.
+    }
+  }
+  return ctx.telegram.sendMessage({ chat_id: ctx.chatId, text, parse_mode: 'HTML', reply_markup: mainMenuKeyboard() })
 }
 
 export async function handleAccountText(ctx, text) {

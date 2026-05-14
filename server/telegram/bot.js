@@ -120,6 +120,7 @@ function movementsForToday(state) {
 }
 
 async function showAccounts(ctx) {
+  sessions.clear(ctx.chatId, ctx.userId)
   const { state } = await repository.load()
   const snapshot = buildLedgerSnapshot(state)
   const myMoney = snapshot.balances
@@ -141,6 +142,7 @@ async function showAccounts(ctx) {
 }
 
 async function showToday(ctx) {
+  sessions.clear(ctx.chatId, ctx.userId)
   const { state } = await repository.load()
   const snapshot = buildLedgerSnapshot(state)
   const rows = movementsForToday(state)
@@ -152,6 +154,7 @@ async function showToday(ctx) {
 }
 
 async function showHistory(ctx) {
+  sessions.clear(ctx.chatId, ctx.userId)
   const { state } = await repository.load()
   const snapshot = buildLedgerSnapshot(state)
   const rows = state.movements
@@ -164,6 +167,7 @@ async function showHistory(ctx) {
 }
 
 async function showReview(ctx) {
+  sessions.clear(ctx.chatId, ctx.userId)
   const { state } = await repository.load()
   const accounts = state.accounts.filter((account) => account.status === ACCOUNT_STATUSES.NEEDS_REVIEW)
   const movements = state.movements.filter((movement) => movement.status === MOVEMENT_STATUSES.NEEDS_REVIEW)

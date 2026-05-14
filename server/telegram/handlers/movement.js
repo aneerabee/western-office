@@ -178,7 +178,7 @@ export async function startMovement(ctx) {
 
 export async function handleMovementCallback(ctx, data) {
   const session = ctx.sessions.get(ctx.chatId, ctx.userId)
-  if (!session || session.flow !== 'movement') return startMovement(ctx)
+  if (!session || session.flow !== 'movement') return sendExpiredMovementMessage(ctx)
 
   if (data === 'mv:cancel') {
     ctx.sessions.clear(ctx.chatId, ctx.userId)
@@ -254,11 +254,20 @@ export async function handleMovementCallback(ctx, data) {
 
   if (data === 'mv:confirm') {
     session.draft.currency = session.draft.currency || movementCurrencyFor(session.draft.type, CURRENCIES.DINAR)
-    const result = await appendTelegramMovement(ctx.repository, session.draft, {
-      idempotencyKey: `${ctx.userId}-${session.sessionId}`,
-      telegramUserId: ctx.userId,
-      telegramChatId: ctx.chatId,
-    })
+    let result
+    try {
+      result = await appendTelegramMovement(ctx.repository, session.draft, {
+        idempotencyKey: `${ctx.userId}-${session.sessionId}`,
+        telegramUserId: ctx.userId,
+        telegramChatId: ctx.chatId,
+      })
+    } catch (error) {
+      console.error('[mohammad-telegram-bot] movement save failed', error?.message || error)
+      return upsertFlowMessage(ctx, session, {
+        text: '<b>تعذر حفظ الحركة الآن.</b>\n<blockquote>حاول مرة أخرى بعد لحظات.</blockquote>',
+        reply_markup: confirmKeyboard(),
+      })
+    }
     if (result.rejected) {
       return upsertFlowMessage(ctx, session, { text: reviewMovementText(session, result.preview), reply_markup: confirmKeyboard() })
     }
@@ -284,6 +293,24 @@ export async function handleMovementCallback(ctx, data) {
   }
 
   return sendStep(ctx, session, 'أمر غير معروف.')
+}
+
+async function sendExpiredMovementMessage(ctx) {
+  const text = '<b>هذه عملية قديمة.</b>\n<blockquote>افتح إدخال حركة من القائمة إذا أردت البدء من جديد.</blockquote>'
+  if (ctx.isCallback && ctx.messageId) {
+    try {
+      return await ctx.telegram.editMessageText({
+        chat_id: ctx.chatId,
+        message_id: ctx.messageId,
+        text,
+        parse_mode: 'HTML',
+        reply_markup: mainMenuKeyboard(),
+      })
+    } catch {
+      // Fall back to a fresh message if Telegram cannot edit the old card.
+    }
+  }
+  return ctx.telegram.sendMessage({ chat_id: ctx.chatId, text, parse_mode: 'HTML', reply_markup: mainMenuKeyboard() })
 }
 
 export async function handleMovementText(ctx, text) {
