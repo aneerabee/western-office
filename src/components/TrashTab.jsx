@@ -15,6 +15,24 @@ function formatDate(v) {
   }).format(new Date(v))
 }
 
+function buildCandidateDates(t) {
+  const dates = []
+  if (t.createdAt) dates.push({ label: 'أُنشئت', value: t.createdAt })
+  if (t.sentAt) dates.push({ label: 'أُرسلت', value: t.sentAt })
+  if (t.issueAt) dates.push({ label: 'المشكلة', value: t.issueAt })
+  if (!t.issueAt && t.updatedAt && t.updatedAt !== t.createdAt) {
+    dates.push({ label: 'آخر تحديث', value: t.updatedAt })
+  }
+  return dates
+}
+
+function getCandidateNote(t) {
+  const note = String(t.note || '').trim()
+  if (note) return note
+  const issueCode = String(t.issueCode || '').trim()
+  return issueCode ? `نوع المشكلة: ${issueCode}` : ''
+}
+
 export default function TrashTab({
   deletedTransfers,
   deletedCustomers,
@@ -147,6 +165,8 @@ export default function TrashTab({
           <div className="trash-card-list">
             {filteredCancellableTransfers.map((t) => {
               const recv = lookupReceiverColor(receiverColorMap, t.receiverName)
+              const dates = buildCandidateDates(t)
+              const note = getCandidateNote(t)
               return (
                 <article key={t.id} className="trash-card trash-card--transfer trash-card--candidate">
                   <div className="trash-card-body">
@@ -171,6 +191,23 @@ export default function TrashTab({
                     <div className="trash-card-date">
                       {t.sentAt ? 'أُرسلت ثم تحتاج إلغاء' : 'لم تُرسل للموظف'}
                     </div>
+                    {dates.length > 0 ? (
+                      <div className="trash-card-timeline" aria-label="تواريخ الحوالة">
+                        {dates.map((item) => (
+                          <span key={`${item.label}-${item.value}`}>
+                            <b>{item.label}</b>
+                            {' '}
+                            {formatDate(item.value)}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
+                    {note ? (
+                      <div className="trash-card-note">
+                        <b>ملاحظة</b>
+                        <span>{note}</span>
+                      </div>
+                    ) : null}
                   </div>
                   <button
                     type="button"
