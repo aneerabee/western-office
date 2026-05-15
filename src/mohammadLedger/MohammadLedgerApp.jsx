@@ -73,10 +73,10 @@ const accountGroupTabs = [
 ]
 
 const accountTypeLabels = {
-  [ACCOUNT_TYPES.PERSON]: 'شخص / جهة',
-  [ACCOUNT_TYPES.CASH]: 'مالي كاش',
-  [ACCOUNT_TYPES.BANK]: 'حساب مصرفي',
-  [ACCOUNT_TYPES.EXPENSE]: 'بند مصروف',
+  [ACCOUNT_TYPES.PERSON]: 'شخص أو جهة',
+  [ACCOUNT_TYPES.CASH]: 'كاش عندي',
+  [ACCOUNT_TYPES.BANK]: 'حسابي المصرفي',
+  [ACCOUNT_TYPES.EXPENSE]: 'مصروف',
   [ACCOUNT_TYPES.ASSET]: 'أصل',
   [ACCOUNT_TYPES.PROJECT]: 'مشروع',
   [ACCOUNT_TYPES.REVIEW]: 'يحتاج حل',
@@ -223,8 +223,8 @@ function visualKind(account) {
 
 function accountKindText(account) {
   if (!account) return ''
-  if (account.valueKind === VALUE_KINDS.CASH) return 'مالي كاش'
-  if (account.valueKind === VALUE_KINDS.BANK) return 'مالي حساب مصرفي'
+  if (account.valueKind === VALUE_KINDS.CASH) return 'كاش عندي'
+  if (account.valueKind === VALUE_KINDS.BANK) return 'حسابي المصرفي'
   if (account.valueKind === VALUE_KINDS.ASSET) return 'أصل'
   if (account.valueKind === VALUE_KINDS.EXPENSE) return 'مصروف'
   if (account.status === ACCOUNT_STATUSES.NEEDS_REVIEW || account.valueKind === VALUE_KINDS.REVIEW) return 'مراجعة'

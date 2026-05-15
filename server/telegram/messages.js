@@ -116,9 +116,9 @@ function accountStepTitle(session) {
 
 function accountStepHelp(session) {
   const preset = accountPresetFor(session?.draft?.type, session?.draft?.valueKind)
-  if (session?.step === 'type') return 'حدد هل هو شخص، مالي عندي، أصل، أو بند مصروف.'
+  if (session?.step === 'type') return 'اختر هل هذا شخص/جهة، كاش عندي، أو حسابي المصرفي.'
   if (session?.step === 'owner') return preset.namePlaceholder || 'اكتب الاسم فقط.'
-  if (session?.step === 'detail') return 'حدد كاش أو حساب مصرفي. العملة تختارها عند إدخال الحركة.'
+  if (session?.step === 'detail') return 'حدد شكل التعامل معه. الدينار والدولار يختاران عند الحركة.'
   if (session?.step === 'review') return 'تأكد من الاسم والتصنيف قبل الحفظ.'
   return ''
 }
