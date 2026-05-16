@@ -388,5 +388,5 @@ export function formatBalanceMeaning(account, amount) {
   if (account?.valueKind === 'cash' || account?.valueKind === 'bank') {
     return value > 0 ? `موجود ${formatted}` : `ناقص ${formatted}`
   }
-  return value > 0 ? `لي عنده ${formatted}` : `عليّ له ${formatted}`
+  return value > 0 ? `أقبض منه ${formatted}` : `أدفع له ${formatted}`
 }

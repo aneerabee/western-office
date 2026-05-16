@@ -8,6 +8,9 @@ import {
 } from './accountCatalog'
 import {
   accountClassificationOptions,
+  accountDisplayName,
+  accountDraftSummary,
+  accountKindLabel,
   accountDetailOptionsFor,
   accountNameValue,
   accountPresetFor,
@@ -66,18 +69,18 @@ const CANCEL_WINDOW_HOURS = 24
 const CANCEL_WINDOW_MS = CANCEL_WINDOW_HOURS * 60 * 60 * 1000
 
 const accountGroupTabs = [
-  { key: 'people', label: 'الناس + مالي', title: 'الناس + مالي' },
+  { key: 'people', label: 'الحسابات', title: 'الحسابات' },
   { key: 'assets', label: 'أصول', title: 'الأصول' },
   { key: 'expenses', label: 'مصروف', title: 'المصروف' },
   { key: 'review', label: 'مراجعة', title: 'مراجعة' },
 ]
 
 const accountTypeLabels = {
-  [ACCOUNT_TYPES.PERSON]: 'شخص أو جهة',
-  [ACCOUNT_TYPES.CASH]: 'كاش عندي',
-  [ACCOUNT_TYPES.BANK]: 'حسابي المصرفي',
+  [ACCOUNT_TYPES.PERSON]: 'شخص أو شركة',
+  [ACCOUNT_TYPES.CASH]: 'مال نقدي عندي',
+  [ACCOUNT_TYPES.BANK]: 'حساب بنكي لي',
   [ACCOUNT_TYPES.EXPENSE]: 'مصروف',
-  [ACCOUNT_TYPES.ASSET]: 'أصل',
+  [ACCOUNT_TYPES.ASSET]: 'أصل أملكه',
   [ACCOUNT_TYPES.PROJECT]: 'مشروع',
   [ACCOUNT_TYPES.REVIEW]: 'يحتاج حل',
 }
@@ -148,7 +151,7 @@ function emptyMovementDraft(type = MOVEMENT_TYPES.TRANSFER) {
 }
 
 function accountLabel(account) {
-  return account ? `${account.ownerName} / ${account.subAccountName}` : ''
+  return account ? accountDisplayName(account) : ''
 }
 
 function movementStatusLabel(status) {
@@ -222,13 +225,7 @@ function visualKind(account) {
 }
 
 function accountKindText(account) {
-  if (!account) return ''
-  if (account.valueKind === VALUE_KINDS.CASH) return 'كاش عندي'
-  if (account.valueKind === VALUE_KINDS.BANK) return 'حسابي المصرفي'
-  if (account.valueKind === VALUE_KINDS.ASSET) return 'أصل'
-  if (account.valueKind === VALUE_KINDS.EXPENSE) return 'مصروف'
-  if (account.status === ACCOUNT_STATUSES.NEEDS_REVIEW || account.valueKind === VALUE_KINDS.REVIEW) return 'مراجعة'
-  return account.subAccountName || 'شخص'
+  return account ? accountKindLabel(account) : ''
 }
 
 function accountBalanceChip(account, bucket) {
@@ -621,9 +618,9 @@ function AccountProfile({ bucket, movements, accounts, onClose, onEditMovement, 
         <div className="ml3-profile-head">
           <button type="button" onClick={onClose}>إغلاق</button>
           <div>
-            <span>{accountTypeLabels[account.type] || account.type}</span>
-            <h2>{account.ownerName}</h2>
-            <p>{account.subAccountName}</p>
+            <span>{accountKindText(account)}</span>
+            <h2>{accountLabel(account)}</h2>
+            <p>{account.valueKind === VALUE_KINDS.RECEIVABLE ? 'حساب علاقة ودين' : 'حساب مالي داخل الدفتر'}</p>
           </div>
         </div>
 
@@ -635,7 +632,7 @@ function AccountProfile({ bucket, movements, accounts, onClose, onEditMovement, 
         <div className="ml3-profile-facts">
           <div>
             <span>التصنيف</span>
-            <strong>{accountTypeLabels[account.type] || account.type}</strong>
+            <strong>{accountKindText(account)}</strong>
           </div>
           <div>
             <span>الحركات</span>
@@ -651,11 +648,11 @@ function AccountProfile({ bucket, movements, accounts, onClose, onEditMovement, 
           <h3>تعديل التصنيف</h3>
           <div className="ml3-profile-editor-grid">
             <label>
-              الاسم
+              الاسم الظاهر
               <input name="ownerName" defaultValue={account.ownerName} />
             </label>
             <label>
-              تفصيل الحساب
+              الوصف
               <input name="subAccountName" defaultValue={account.subAccountName} />
             </label>
             <label>
@@ -721,7 +718,7 @@ function ReviewAccountCard({ bucket, activeAccounts, onResolve, onMerge, onDisab
           <input name="ownerName" defaultValue={account.ownerName} />
         </label>
         <label>
-          تفصيل الحساب
+          الوصف
           <input name="subAccountName" defaultValue={account.subAccountName} />
         </label>
         <label>
@@ -768,7 +765,7 @@ function ExternalAccountCard({ account, onCreate }) {
       </div>
       <form className="ml3-decision-grid" onSubmit={(event) => onCreate(event, account)}>
         <label>
-          تفصيل الحساب
+          الوصف
           <input name="subAccountName" defaultValue={account.subAccountName} />
         </label>
         <label>
@@ -2056,7 +2053,7 @@ export default function MohammadLedgerApp() {
                 />
               </label>
               {!selectedAccountPreset.skipDetail ? (
-              <div className="ml3-account-detail-choice" aria-label={selectedAccountPreset.detailLabel || 'تفصيل الحساب'}>
+              <div className="ml3-account-detail-choice" aria-label={selectedAccountPreset.detailLabel || 'الوصف'}>
                 {selectedAccountDetails.map((option) => (
                   <button
                     type="button"
@@ -2070,7 +2067,7 @@ export default function MohammadLedgerApp() {
               </div>
               ) : null}
               <div className="ml3-account-summary">
-                <strong>{accountDraft.ownerName || 'أنا'} · {accountDraft.subAccountName} · {accountTypeLabels[accountDraft.type]}</strong>
+                <strong>{accountDraftSummary(accountDraft)}</strong>
               </div>
               <button type="submit">إضافة حساب</button>
             </form>

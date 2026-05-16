@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 import { VALUE_KINDS, getActivePostingAccounts } from '../../src/mohammadLedger/accountCatalog.js'
+import { accountDisplayName } from '../../src/mohammadLedger/accountConfig.js'
 import {
   CURRENCIES,
   MOVEMENT_STATUSES,
@@ -30,11 +31,7 @@ export function formatRate(value) {
 }
 
 export function accountLabel(account) {
-  if (!account) return ''
-  const ownerName = String(account.ownerName || '').trim()
-  const subAccountName = String(account.subAccountName || '').trim()
-  if (ownerName && subAccountName) return `${ownerName} / ${subAccountName}`
-  return ownerName || subAccountName || 'حساب بدون اسم'
+  return account ? accountDisplayName(account) : ''
 }
 
 export function balanceText(account, bucket) {

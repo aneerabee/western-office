@@ -72,7 +72,7 @@ describe('telegram account flow', () => {
     expect(ctx.repository.state.accounts).toHaveLength(1)
     expect(ctx.repository.state.accounts[0]).toMatchObject({
       ownerName: 'سعيد',
-      subAccountName: 'كاش',
+      subAccountName: 'كاش معه',
       type: ACCOUNT_TYPES.PERSON,
       valueKind: VALUE_KINDS.RECEIVABLE,
     })

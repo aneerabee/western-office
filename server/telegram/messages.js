@@ -1,5 +1,11 @@
 import { CURRENCIES } from '../../src/mohammadLedger/ledgerCore.js'
-import { accountNameValue, accountPresetFor } from '../../src/mohammadLedger/accountConfig.js'
+import {
+  accountDisplayName,
+  accountDraftSummary,
+  accountKindLabel,
+  accountNameValue,
+  accountPresetFor,
+} from '../../src/mohammadLedger/accountConfig.js'
 import { VALUE_KINDS } from '../../src/mohammadLedger/accountCatalog.js'
 import { transferAccountKind } from '../../src/mohammadLedger/accountCompatibility.js'
 import {
@@ -86,12 +92,9 @@ function currentStepHelp(session) {
 
 function typeTag(account) {
   if (!account) return ''
-  const kind = transferAccountKind(account) === 'cash' ? 'كاش' : 'حساب مصرفي'
-  if (account.valueKind === VALUE_KINDS.CASH || account.valueKind === VALUE_KINDS.BANK) return `مالي · ${kind}`
-  if (account.valueKind === VALUE_KINDS.RECEIVABLE) return `شخص/جهة · ${kind}`
-  if (account.valueKind === VALUE_KINDS.ASSET) return 'أصل'
-  if (account.valueKind === VALUE_KINDS.EXPENSE) return 'مصروف'
-  return kind
+  const route = transferAccountKind(account) === 'cash' ? 'كاش' : 'بنكي'
+  if (account.valueKind === VALUE_KINDS.RECEIVABLE) return `${accountKindLabel(account)} · ${route}`
+  return accountKindLabel(account)
 }
 
 export function mainMenuText(summary = null) {
@@ -116,7 +119,7 @@ function accountStepTitle(session) {
 
 function accountStepHelp(session) {
   const preset = accountPresetFor(session?.draft?.type, session?.draft?.valueKind)
-  if (session?.step === 'type') return 'اختر هل هذا شخص/جهة، كاش عندي، أو حسابي المصرفي.'
+  if (session?.step === 'type') return 'اختر ماذا تريد إضافته بالضبط.'
   if (session?.step === 'owner') return preset.namePlaceholder || 'اكتب الاسم فقط.'
   if (session?.step === 'detail') return 'حدد شكل التعامل معه. الدينار والدولار يختاران عند الحركة.'
   if (session?.step === 'review') return 'تأكد من الاسم والتصنيف قبل الحفظ.'
@@ -130,7 +133,7 @@ export function accountStepText(session) {
   const currentIndex = Math.max(0, steps.indexOf(session?.step))
   const progress = steps.map((step, index) => (index <= currentIndex ? '●' : '○')).join('')
   const summary = []
-  if (currentIndex > steps.indexOf('type') && draft.type) summary.push(htmlLine('النوع', preset.title))
+  if (currentIndex > steps.indexOf('type') && draft.type) summary.push(htmlLine('التصنيف', preset.title))
   const nameValue = accountNameValue(draft)
   if (currentIndex > steps.indexOf('owner') && nameValue) summary.push(htmlLine(preset.nameLabel || 'الاسم', nameValue))
   if (!preset.skipDetail && currentIndex > steps.indexOf('detail') && draft.subAccountName) {
@@ -155,7 +158,7 @@ export function accountReviewText(session, result = null) {
     '<b>تأكيد الحساب</b>',
     '',
     '<blockquote>',
-    escapeHtml(`${draft.ownerName || 'بدون اسم'} / ${draft.subAccountName || preset.subAccountName}`),
+    escapeHtml(accountDraftSummary(draft)),
     '\n',
     escapeHtml(preset.title),
     '\n',
@@ -251,7 +254,7 @@ export function compactAccountChoiceText(account, bucket) {
 
 export function accountChoiceButtonText(account, bucket) {
   const presentation = accountBalancePresentation(account, bucket)
-  return `${presentation.icon} ${account.ownerName} / ${account.subAccountName} · ${presentation.text}`
+  return `${presentation.icon} ${accountDisplayName(account)} · ${presentation.text}`
 }
 
 export function accountChoiceButtonStyle(account, bucket) {

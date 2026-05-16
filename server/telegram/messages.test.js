@@ -27,18 +27,18 @@ describe('telegram account balance presentation', () => {
     const bucket = { dinar: 12500, usd: 0 }
 
     expect(formatAccountBalance(receivable, bucket)).toBe('أقبض منه 12,500 د.ل')
-    expect(accountChoiceButtonText(receivable, bucket)).toBe('🟢 سعيد / كاش · أقبض منه 12,500 د.ل')
+    expect(accountChoiceButtonText(receivable, bucket)).toBe('🟢 سعيد · كاش · أقبض منه 12,500 د.ل')
     expect(accountChoiceButtonStyle(receivable, bucket)).toBe('success')
-    expect(accountBlockquote(receivable, bucket)).toContain('🟢 سعيد / كاش')
+    expect(accountBlockquote(receivable, bucket)).toContain('🟢 سعيد · كاش')
   })
 
   it('marks money I should pay in red terms', () => {
     const bucket = { dinar: -3200, usd: 0 }
 
     expect(formatAccountBalance(receivable, bucket)).toBe('أدفع له 3,200 د.ل')
-    expect(accountChoiceButtonText(receivable, bucket)).toBe('🔴 سعيد / كاش · أدفع له 3,200 د.ل')
+    expect(accountChoiceButtonText(receivable, bucket)).toBe('🔴 سعيد · كاش · أدفع له 3,200 د.ل')
     expect(accountChoiceButtonStyle(receivable, bucket)).toBe('danger')
-    expect(accountBlockquote(receivable, bucket)).toContain('🔴 سعيد / كاش')
+    expect(accountBlockquote(receivable, bucket)).toContain('🔴 سعيد · كاش')
   })
 
   it('uses the same visual direction for my own money accounts', () => {
@@ -65,8 +65,8 @@ describe('telegram movement presentation', () => {
 
     expect(card).toContain('<blockquote>')
     expect(card).toContain('🔁 تحويل · 1,250 د.ل')
-    expect(card).toContain('من: أنا / كاش')
-    expect(card).toContain('إلى: سعيد / كاش')
+    expect(card).toContain('من: كاش عندي: كاش')
+    expect(card).toContain('إلى: سعيد · كاش')
     expect(card).toContain('ملاحظة: تجربة &lt;مهمة&gt;')
   })
 
@@ -103,11 +103,11 @@ describe('telegram movement presentation', () => {
     )
 
     expect(text).toContain('<b>تأكيد الحركة</b>')
-    expect(text).toContain('🔴 من: أنا / كاش')
+    expect(text).toContain('🔴 من: كاش عندي: كاش')
     expect(text).toContain('قبل: 2,000 د.ل')
     expect(text).toContain('التغيير: -500 د.ل')
     expect(text).toContain('بعد: 1,500 د.ل')
-    expect(text).toContain('🟢 إلى: سعيد / كاش')
+    expect(text).toContain('🟢 إلى: سعيد · كاش')
     expect(text).toContain('التغيير: +500 د.ل')
     expect(text).toContain('بعد: 600 د.ل')
   })
